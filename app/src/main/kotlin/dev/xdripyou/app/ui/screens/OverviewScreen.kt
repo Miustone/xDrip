@@ -187,12 +187,12 @@ fun OverviewScreen(
                             FilledTonalButton(onClick = onSeedDemo) {
                                 Icon(Icons.Rounded.Timeline, null, Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("Demo-Kurve laden")
+                                Text("Demo-Kurve", maxLines = 1)
                             }
                             OutlinedButton(onClick = onOpenSettingsTab) {
                                 Icon(Icons.Rounded.Science, null, Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("Quelle / Test")
+                                Text("Quelle & Test", maxLines = 1)
                             }
                         }
                     } else {
