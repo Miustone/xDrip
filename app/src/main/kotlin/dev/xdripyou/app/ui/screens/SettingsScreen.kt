@@ -119,6 +119,36 @@ private data class SettingsCategoryMeta(
     val icon: ImageVector,
 )
 
+private data class SettingSearchItem(
+    val section: SettingsSection,
+    val title: String,
+    val summary: String,
+    val keywords: String,
+)
+
+private val searchableOptionsIndex = listOf(
+    SettingSearchItem(SettingsSection.DISPLAY, "Zahlenwand auf Sperrbildschirm", "Live-Glukose, Trend & Schritte direkt auf dem Lockscreen (gekachelt oder zentriert)", "zahlenwand lockscreen sperrbildschirm wallpaper number wall kachel"),
+    SettingSearchItem(SettingsSection.DISPLAY, "Always On Display (AOD Overlay)", "Werte & Trend bei ausgeschaltetem Bildschirm inkl. Einbrennschutz", "aod always on display bildschirm aus overlay bedienungshilfe accessibility"),
+    SettingSearchItem(SettingsSection.DISPLAY, "Schwebende BG-Blase (Floating Overlay)", "Dauerhaft verschiebbare Blase über anderen Apps", "floating overlay blase schwebend pip"),
+    SettingSearchItem(SettingsSection.DISPLAY, "Schritte & Aktivität im Chart", "Hardware-Schrittzähler im oberen Status & als Balken im Graph", "schritte steps aktivitaet bewegung sport balken"),
+    SettingSearchItem(SettingsSection.DISPLAY, "Kompakte Alarmleiste", "Unaufdringliche einzeilige Alarmleiste auf der Übersicht", "alarm kompakt leiste banner uebersicht groesse"),
+    SettingSearchItem(SettingsSection.DISPLAY, "Punktegröße & Basalrate im Graph", "Punktdurchmesser (2-7 dp), Basal-Stufenlinie, IOB-Kurve, Gitter & Rauschfilter", "punkte punktegroesse graph chart basal iob gitter durchschnitt rauschfilter glaettung"),
+    SettingSearchItem(SettingsSection.DISPLAY, "Einheit (mg/dL / mmol/L) & Zielbereich", "Blutzucker-Einheit und grünes Zielband konfigurieren", "mgdl mmol einheit zielbereich zielband range"),
+    SettingSearchItem(SettingsSection.DISPLAY, "Insulin-Modelle (Fiasp, Lyumjev, NovoRapid)", "IOB/COB-Wirkungskurve, Bolusrechner-Faktoren & AAPS JSON Profilimport", "insulin fiasp lyumjev novorapid dia iob cob bolus isf carbratio aaps profil basal"),
+    SettingSearchItem(SettingsSection.DISPLAY, "Material 3 You & Nachttisch-Modus", "Dynamic Color Wallpaper-Farben, Hell/Dunkel/System & Wachhalten", "theme hell dunkel material you dynamic color nachttisch wachhalten"),
+    SettingSearchItem(SettingsSection.SOURCES, "Dexcom G7 / ONE+ / G6 BLE (BlueTails & OB1)", "Gekoppelte G7-Sensoren, OB1 AES Auth, Transmitter-ID & 3h-Backfill", "dexcom g7 g6 one bluetails ob1 bluetooth ble backfill transmitter"),
+    SettingSearchItem(SettingsSection.SOURCES, "Freestyle Libre 1/2/3 & NFC FRAM", "NfcV FRAM Scan, Bubble/MiaoMiao Bridge, Libre 2 BLE & OOP2-Bridge", "libre nfc fram bubble miaomiao oop2 ble libre3"),
+    SettingSearchItem(SettingsSection.SOURCES, "CamAPS FX & Companion-Apps", "Notification Listener, Paketauswahl & Jam-/Deduplizierungs-Schutz", "camaps companion notification listener paket jam deduplizierung"),
+    SettingSearchItem(SettingsSection.SOURCES, "Cloud-Follower (Share, LibreLinkUp, CareLink, WebFollow)", "Direkter Cloud-Abruf von Dexcom, LibreView, Medtronic & JSON-URLs", "dexcom share librelinkup carelink medtronic webfollow follower"),
+    SettingSearchItem(SettingsSection.SOURCES, "Sensor-Kalibrierung (WLS & Plugins)", "WLS, Letzte 7 OLS, Feste Steigung, MARD & Fingerstich-Kalibrierungen", "kalibrierung calibration wls ols slope intercept mard"),
+    SettingSearchItem(SettingsSection.ALARMS, "Alarm-Ton, DND-Umgehung & Klingelton", "Lautlos-Umgehung, Klingeltonwahl, Anruf-Stummschaltung & Stale-Sperre", "klingelton sound dnd lautlos stumm anruf stale"),
+    SettingSearchItem(SettingsSection.ALARMS, "Wegwischen-Schlummern & Eskalation", "Snooze-on-Dismiss, 3-Min-Verzögerung, Blitz & Bildschirm-Wecken", "snooze dismiss wischen blitz taschenlampe wake eskalation ansteigend"),
+    SettingSearchItem(SettingsSection.ALARMS, "Sprachausgabe (TTS) & Wear-Broadcast", "Messwerte/Alarme vorlesen & ExternalStatus Broadcast für Smartwatches", "tts sprachausgabe vorlesen wear smartwatch externalstatus broadcast"),
+    SettingSearchItem(SettingsSection.CLOUD, "Nightscout, Health Connect, InfluxDB & Tidepool", "Upload/Pull für Entries, Treatments, DeviceStatus & bidirektionales Sync", "nightscout health connect influxdb tidepool upload sync"),
+    SettingSearchItem(SettingsSection.CLOUD, "xDrip Peer-Sync, Web-Service 17580 & Backup", "Master-Follower-Sync, lokaler HTTP-Server, Tasker, JSON/CSV-Backup & Aufbewahrung", "peer sync webservice 17580 sgv pebble tasker backup json csv export import"),
+    SettingSearchItem(SettingsSection.DIAGNOSTICS, "Live-Protokoll, Simulator, Demo & Changelog", "Notification-Log, Testwerte einspeisen, Demo-Verlauf & App-Info", "diagnose log simulator demo test version changelog"),
+)
+
 private val settingsCategories = listOf(
     SettingsCategoryMeta(
         section = SettingsSection.SOURCES,
@@ -359,6 +389,15 @@ private fun SettingsHubPage(
                 it.keywords.lowercase().contains(q)
         }
     }
+    val matchingOptions = remember(query) {
+        val q = query.trim().lowercase(Locale.getDefault())
+        if (q.isEmpty()) emptyList()
+        else searchableOptionsIndex.filter {
+            it.title.lowercase().contains(q) ||
+                it.summary.lowercase().contains(q) ||
+                it.keywords.lowercase().contains(q)
+        }
+    }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -428,6 +467,49 @@ private fun SettingsHubPage(
                         }
                     }
                 }
+            }
+        }
+
+        if (matchingOptions.isNotEmpty()) {
+            item {
+                Text(
+                    "Gefundene Funktionen (${matchingOptions.size})",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = scheme.primary,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
+            }
+            items(matchingOptions, key = { "opt_${it.title}" }) { item ->
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = scheme.surfaceContainerHigh,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .clickable { onSelectSection(item.section) },
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(item.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text(item.summary, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
+                            Text(item.section.title, style = MaterialTheme.typography.labelSmall, color = scheme.primary)
+                        }
+                        Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = scheme.onSurfaceVariant)
+                    }
+                }
+            }
+            item {
+                Text(
+                    "Passende Kategorien",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = scheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                )
             }
         }
 
@@ -1399,6 +1481,53 @@ private fun SettingsDisplayPage(
                     }
                     SwitchRow("24h-Statuszeile auf Übersicht", "Zeigt TIR, Ø, GMI und CV% kompakt unter dem Chart", settings.showExtraStatusLine, onSetShowExtraStatusLine)
                     SwitchRow(
+                        "Kompakte Alarmleiste in Übersicht",
+                        "Schmale, unaufdringliche Alarm-Zeile statt großer Warnkarte",
+                        settings.compactAlertBanner,
+                        { viewModel.setGraphAndStepsConfig(settings.showStepsCounter, settings.showStepsInChart, settings.showBasalInChart, settings.chartDotSizeDp, it) },
+                    )
+                    val activityPermLauncher = rememberLauncherForActivityResult(
+                        ActivityResultContracts.RequestPermission()
+                    ) { granted ->
+                        if (granted) {
+                            viewModel.setGraphAndStepsConfig(true, settings.showStepsInChart, settings.showBasalInChart, settings.chartDotSizeDp, settings.compactAlertBanner)
+                        }
+                    }
+                    val stepsCtx = LocalContext.current
+                    SwitchRow(
+                        "Schritte-Zähler (Hardware-Sensor)",
+                        "Erfasst Schritte im Hintergrund und zeigt sie in Übersicht & Chart (${state.todaySteps} heute)",
+                        settings.showStepsCounter,
+                        { wantSteps ->
+                            if (wantSteps && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                                androidx.core.content.ContextCompat.checkSelfPermission(stepsCtx, Manifest.permission.ACTIVITY_RECOGNITION) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                            ) {
+                                activityPermLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+                            } else {
+                                viewModel.setGraphAndStepsConfig(wantSteps, settings.showStepsInChart, settings.showBasalInChart, settings.chartDotSizeDp, settings.compactAlertBanner)
+                            }
+                        },
+                    )
+                    SwitchRow(
+                        "Schritte / Aktivität im Graph",
+                        "Zeigt Aktivitätsbalken unten im Verlauf an",
+                        settings.showStepsInChart,
+                        { viewModel.setGraphAndStepsConfig(settings.showStepsCounter, it, settings.showBasalInChart, settings.chartDotSizeDp, settings.compactAlertBanner) },
+                    )
+                    SwitchRow(
+                        "Basalrate im Graph einblenden",
+                        "Zeigt Basal-Profilkurve zusätzlich zur IOB-Aktivität im Verlauf",
+                        settings.showBasalInChart,
+                        { viewModel.setGraphAndStepsConfig(settings.showStepsCounter, settings.showStepsInChart, it, settings.chartDotSizeDp, settings.compactAlertBanner) },
+                    )
+                    Text("Punktegröße im Graph: ${settings.chartDotSizeDp} dp", style = MaterialTheme.typography.bodySmall)
+                    Slider(
+                        value = settings.chartDotSizeDp.toFloat(),
+                        onValueChange = { viewModel.setGraphAndStepsConfig(settings.showStepsCounter, settings.showStepsInChart, settings.showBasalInChart, it.roundToInt(), settings.compactAlertBanner) },
+                        valueRange = 2f..7f,
+                        steps = 4,
+                    )
+                    SwitchRow(
                         "Sensor-Rauschfilter (Glättung)",
                         "5-Punkt Savitzky-Golay Glättung bei sprunghaften Werten (Noise-Index ${String.format(Locale.US, "%.2f", state.noiseIndex)})",
                         settings.smoothChartNoise,
@@ -1429,6 +1558,95 @@ private fun SettingsDisplayPage(
                             }
                         },
                     )
+                }
+            }
+        }
+
+        // Sperrbildschirm-Zahlenwand (Lockscreen Number Wall)
+        item {
+            var nwFeedback by remember { mutableStateOf<String?>(null) }
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("Sperrbildschirm · Zahlenwand (Number Wall)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    SwitchRow(
+                        "Zahlenwand auf dem Sperrbildschirm",
+                        "Zeigt aktuellen Glukosewert, Trend, IOB & Schritte als Sperrbildschirm-Hintergrund",
+                        settings.numberWallEnabled,
+                        { viewModel.setNumberWallConfig(it, settings.numberWallTiled, settings.numberWallDynamicColor, settings.numberWallOpacity) },
+                    )
+                    SwitchRow(
+                        "Kachel-Muster (Diagonal wiederholt)",
+                        "Mehrfach über den Sperrbildschirm gekachelt statt einer einzelnen zentrierten Karte",
+                        settings.numberWallTiled,
+                        { viewModel.setNumberWallConfig(settings.numberWallEnabled, it, settings.numberWallDynamicColor, settings.numberWallOpacity) },
+                    )
+                    SwitchRow(
+                        "Farbe nach BZ-Zielbereich",
+                        "Grün/Orange/Rot passend zum Glukosewert statt reinem Weiß",
+                        settings.numberWallDynamicColor,
+                        { viewModel.setNumberWallConfig(settings.numberWallEnabled, settings.numberWallTiled, it, settings.numberWallOpacity) },
+                    )
+                    Text("Deckkraft: ${settings.numberWallOpacity} %", style = MaterialTheme.typography.bodySmall)
+                    Slider(
+                        value = settings.numberWallOpacity.toFloat(),
+                        onValueChange = { viewModel.setNumberWallConfig(settings.numberWallEnabled, settings.numberWallTiled, settings.numberWallDynamicColor, it.roundToInt()) },
+                        valueRange = 30f..100f,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { viewModel.refreshNumberWallNow { nwFeedback = it } },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Jetzt anwenden") }
+                        OutlinedButton(
+                            onClick = { viewModel.clearNumberWallNow { nwFeedback = it } },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Zurücksetzen") }
+                    }
+                    nwFeedback?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary) }
+                }
+            }
+        }
+
+        // Always On Display (AOD Accessibility Overlay)
+        item {
+            val aodCtx = LocalContext.current
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("Always On Display (AOD)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    SwitchRow(
+                        "Always On Display Overlay aktiv",
+                        "Zeigt Blutzucker & Trend automatisch bei ausgeschaltetem / gesperrtem Display",
+                        settings.aodEnabled,
+                        { viewModel.setAodConfig(it, settings.aodOpacityPercent, settings.aodBurnInShift) },
+                    )
+                    SwitchRow(
+                        "OLED Einbrennschutz-Verschiebung",
+                        "Bewegt den Wert pro Minute leicht über das Display",
+                        settings.aodBurnInShift,
+                        { viewModel.setAodConfig(settings.aodEnabled, settings.aodOpacityPercent, it) },
+                    )
+                    Text("AOD Helligkeit / Deckkraft: ${settings.aodOpacityPercent} %", style = MaterialTheme.typography.bodySmall)
+                    Slider(
+                        value = settings.aodOpacityPercent.toFloat(),
+                        onValueChange = { viewModel.setAodConfig(settings.aodEnabled, it.roundToInt(), settings.aodBurnInShift) },
+                        valueRange = 30f..100f,
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            aodCtx.startActivity(
+                                Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Bedienungshilfe („xDrip 2 You · Always On Display“) aktivieren") }
                 }
             }
         }

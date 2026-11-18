@@ -143,3 +143,21 @@ interface ReminderDao {
     @Query("DELETE FROM reminders WHERE id = :id")
     suspend fun deleteById(id: Long)
 }
+
+@Dao
+interface ActivitySampleDao {
+    @Query("SELECT * FROM activity_samples WHERE timestampMs >= :sinceMs ORDER BY timestampMs ASC LIMIT :limit")
+    fun observeSince(sinceMs: Long, limit: Int = 500): Flow<List<ActivitySampleEntity>>
+
+    @Query("SELECT * FROM activity_samples WHERE timestampMs >= :sinceMs ORDER BY timestampMs ASC")
+    suspend fun getSince(sinceMs: Long): List<ActivitySampleEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: ActivitySampleEntity): Long
+
+    @Query("DELETE FROM activity_samples WHERE timestampMs < :cutoffMs")
+    suspend fun deleteOlderThan(cutoffMs: Long)
+
+    @Query("DELETE FROM activity_samples")
+    suspend fun deleteAll()
+}

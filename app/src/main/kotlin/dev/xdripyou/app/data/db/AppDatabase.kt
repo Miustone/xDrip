@@ -19,8 +19,9 @@ import kotlinx.coroutines.launch
         CollectorEventEntity::class,
         CalibrationEntity::class,
         ReminderEntity::class,
+        ActivitySampleEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -31,6 +32,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun collectorEventDao(): CollectorEventDao
     abstract fun calibrationDao(): CalibrationDao
     abstract fun reminderDao(): ReminderDao
+    abstract fun activitySampleDao(): ActivitySampleDao
 
     companion object {
         @Volatile
@@ -92,6 +94,23 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS activity_samples (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        timestampMs INTEGER NOT NULL,
+                        steps INTEGER NOT NULL,
+                        heartRateBpm INTEGER,
+                        source TEXT NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_activity_samples_timestampMs ON activity_samples(timestampMs)")
+            }
+        }
+
         fun get(context: Context): AppDatabase {
             return instance ?: synchronized(this) {
                 instance ?: buildDatabase(context.applicationContext).also { instance = it }
@@ -101,7 +120,7 @@ abstract class AppDatabase : RoomDatabase() {
         private fun buildDatabase(context: Context): AppDatabase {
             lateinit var db: AppDatabase
             db = Room.databaseBuilder(context, AppDatabase::class.java, "xdrip_you.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .addCallback(object : Callback() {
                     override fun onCreate(sqliteDb: SupportSQLiteDatabase) {
                         super.onCreate(sqliteDb)

@@ -21,14 +21,17 @@ class GlucoseForegroundService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var tickerJob: Job? = null
     private var tickCount = 0
+    private var stepTracker: StepTrackerManager? = null
 
     override fun onCreate() {
         super.onCreate()
         NotificationChannels.ensureAll(this)
+        stepTracker = StepTrackerManager(application as XdripYouApplication)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val app = application as XdripYouApplication
+        stepTracker?.startIfPermitted()
         serviceScope.launch {
             app.localWebServer.syncWithSettings(app.repository.settingsStore.current())
             val notif = app.alertEngine.buildOngoingNotification()
@@ -140,6 +143,7 @@ class GlucoseForegroundService : Service() {
     }
 
     override fun onDestroy() {
+        stepTracker?.stop()
         tickerJob?.cancel()
         serviceScope.cancel()
         super.onDestroy()

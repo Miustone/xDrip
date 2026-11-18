@@ -2,4 +2,6 @@
     <string name="app_name">xDrip 2 You</string>
     <string name="collector_service_label">xDrip 2 You · CamAPS Companion</string>
     <string name="widget_name">xDrip 2 You · Blutzucker</string>
+    <string name="aod_service_label">xDrip 2 You · Always On Display</string>
+    <string name="aod_service_description">Zeigt aktuelle Blutzuckerwerte energiesparend auf dem Sperrbildschirm und Always On Display an.</string>
 </resources>

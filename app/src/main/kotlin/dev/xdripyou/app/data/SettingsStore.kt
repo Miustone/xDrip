@@ -201,6 +201,18 @@ class SettingsStore(context: Context) {
         calibrationAlgorithm = this[Keys.CALIBRATION_ALGORITHM] ?: "xdrip_wls",
         dexcomTransmitterId = this[Keys.DEXCOM_TRANSMITTER_ID] ?: "",
         libreOopBridgeEnabled = this[Keys.LIBRE_OOP_BRIDGE] ?: false,
+        numberWallEnabled = this[Keys.NUMBER_WALL_ENABLED] ?: false,
+        numberWallTiled = this[Keys.NUMBER_WALL_TILED] ?: false,
+        numberWallDynamicColor = this[Keys.NUMBER_WALL_DYNAMIC_COLOR] ?: true,
+        numberWallOpacity = this[Keys.NUMBER_WALL_OPACITY] ?: 85,
+        aodEnabled = this[Keys.AOD_ENABLED] ?: false,
+        aodOpacityPercent = this[Keys.AOD_OPACITY] ?: 80,
+        aodBurnInShift = this[Keys.AOD_BURN_IN_SHIFT] ?: true,
+        showStepsCounter = this[Keys.SHOW_STEPS_COUNTER] ?: true,
+        showStepsInChart = this[Keys.SHOW_STEPS_IN_CHART] ?: true,
+        showBasalInChart = this[Keys.SHOW_BASAL_IN_CHART] ?: true,
+        chartDotSizeDp = this[Keys.CHART_DOT_SIZE_DP] ?: 4,
+        compactAlertBanner = this[Keys.COMPACT_ALERT_BANNER] ?: true,
     )
 
     data class AlertCooldowns(
@@ -344,6 +356,18 @@ class SettingsStore(context: Context) {
         val CALIBRATION_ALGORITHM = stringPreferencesKey("calibration_algorithm")
         val DEXCOM_TRANSMITTER_ID = stringPreferencesKey("dexcom_transmitter_id")
         val LIBRE_OOP_BRIDGE = booleanPreferencesKey("libre_oop_bridge")
+        val NUMBER_WALL_ENABLED = booleanPreferencesKey("number_wall_enabled")
+        val NUMBER_WALL_TILED = booleanPreferencesKey("number_wall_tiled")
+        val NUMBER_WALL_DYNAMIC_COLOR = booleanPreferencesKey("number_wall_dynamic_color")
+        val NUMBER_WALL_OPACITY = intPreferencesKey("number_wall_opacity")
+        val AOD_ENABLED = booleanPreferencesKey("aod_enabled")
+        val AOD_OPACITY = intPreferencesKey("aod_opacity")
+        val AOD_BURN_IN_SHIFT = booleanPreferencesKey("aod_burn_in_shift")
+        val SHOW_STEPS_COUNTER = booleanPreferencesKey("show_steps_counter")
+        val SHOW_STEPS_IN_CHART = booleanPreferencesKey("show_steps_in_chart")
+        val SHOW_BASAL_IN_CHART = booleanPreferencesKey("show_basal_in_chart")
+        val CHART_DOT_SIZE_DP = intPreferencesKey("chart_dot_size_dp")
+        val COMPACT_ALERT_BANNER = booleanPreferencesKey("compact_alert_banner")
 
         val LAST_COMPANION_VAL = longPreferencesKey("last_companion_val")
         val LAST_COMPANION_REPEAT = longPreferencesKey("last_companion_repeat")

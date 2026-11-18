@@ -40,6 +40,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.xdripyou.app.domain.ActivitySample
+import dev.xdripyou.app.domain.BasalSchedule
 import dev.xdripyou.app.domain.CalibrationEngine
 import dev.xdripyou.app.domain.GlucoseReading
 import dev.xdripyou.app.domain.GlucoseUnit
@@ -73,6 +75,11 @@ fun GlucoseChart(
     insulinDurationMinutes: Int = 270,
     insulinPeakMinutes: Int = 65,
     insulinOnsetMinutes: Int = 15,
+    activitySamples: List<ActivitySample> = emptyList(),
+    showStepsInChart: Boolean = true,
+    showBasalInChart: Boolean = false,
+    basalSchedule: BasalSchedule? = null,
+    dotSizeDp: Int = 4,
     chartHeight: Dp? = 210.dp,
     modifier: Modifier = Modifier,
 ) {
@@ -323,6 +330,45 @@ fun GlucoseChart(
                 )
             }
 
+            // 4c. Activity / Steps bars along bottom (Schritte)
+            if (showStepsInChart && activitySamples.isNotEmpty()) {
+                val visibleSteps = activitySamples.filter { it.timestampMs in startMs..endMs && it.steps > 0 }
+                if (visibleSteps.isNotEmpty()) {
+                    val maxSteps = (visibleSteps.maxOfOrNull { it.steps } ?: 1).coerceAtLeast(100)
+                    val maxBarH = chartH * 0.14f
+                    val barW = (chartW / visibleSteps.size.coerceAtLeast(12)).coerceIn(5f, 18f)
+                    for (s in visibleSteps) {
+                        val sx = xForMs(s.timestampMs)
+                        val barH = ((s.steps.toFloat() / maxSteps) * maxBarH).coerceAtLeast(4f)
+                        drawRect(
+                            color = scheme.tertiary.copy(alpha = 0.24f),
+                            topLeft = Offset(sx - barW / 2f, chartBottom - barH),
+                            size = androidx.compose.ui.geometry.Size(barW, barH),
+                        )
+                    }
+                }
+            }
+
+            // 4d. Basal rate step curve along lower chart band
+            if (showBasalInChart && basalSchedule != null) {
+                val maxRate = (basalSchedule.hourlyRates.maxOrNull() ?: 1.0).coerceAtLeast(0.5)
+                val basalBandH = chartH * 0.15f
+                val stepCount = 24
+                val basalPath = Path()
+                for (i in 0..stepCount) {
+                    val ms = startMs + ((nowMs - startMs) * i) / stepCount
+                    val rate = basalSchedule.rateAt(ms)
+                    val bx = xForMs(ms)
+                    val by = chartBottom - ((rate / maxRate) * basalBandH).toFloat()
+                    if (i == 0) basalPath.moveTo(bx, by) else basalPath.lineTo(bx, by)
+                }
+                drawPath(
+                    path = basalPath,
+                    color = scheme.secondary.copy(alpha = 0.50f),
+                    style = Stroke(width = 2.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f), 0f)),
+                )
+            }
+
             // 5. Treatment markers along bottom of chart
             val treatLabelPaint = Paint().apply {
                 color = scheme.primary.toArgb()
@@ -336,7 +382,13 @@ fun GlucoseChart(
                 val tx = xForMs(t.timestampMs)
                 val markerY = chartBottom - 16f
                 if (t.hasInsulin) {
-                    drawCircle(color = scheme.primary, radius = 8f, center = Offset(tx, markerY))
+                    val bolusH = ((t.insulinUnits / 10.0) * (chartH * 0.22)).toFloat().coerceIn(10f, chartH * 0.28f)
+                    drawRect(
+                        color = scheme.primary.copy(alpha = 0.25f),
+                        topLeft = Offset(tx - 4f, chartBottom - bolusH),
+                        size = androidx.compose.ui.geometry.Size(8f, bolusH),
+                    )
+                    drawCircle(color = scheme.primary, radius = 7.5f, center = Offset(tx, markerY))
                     treatLabelPaint.color = scheme.primary.toArgb()
                     drawContext.canvas.nativeCanvas.drawText(
                         "${String.format(Locale.US, "%.1f", t.insulinUnits)}E",
@@ -453,7 +505,8 @@ fun GlucoseChart(
                 }
             }
 
-            val dotRadius = if (sorted.size > 100) 5.5f else 7.5f
+            val baseDotPx = with(density) { (dotSizeDp.coerceIn(2, 7) * 0.68f).dp.toPx() }
+            val dotRadius = if (sorted.size > 120) baseDotPx * 0.78f else baseDotPx
             for (r in sorted) {
                 val pt = Offset(xForMs(r.timestampMs), yForMgdl(r.mgdl))
                 val c = glucoseColors.colorForMgdl(r.mgdl, targetLowMgdl, targetHighMgdl)

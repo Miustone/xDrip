@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import dev.xdripyou.app.domain.ActiveAlertState
+import dev.xdripyou.app.domain.ActivitySample
 import dev.xdripyou.app.domain.AlertRule
 import dev.xdripyou.app.domain.CalibrationRecord
 import dev.xdripyou.app.domain.CollectorEvent
@@ -264,6 +265,36 @@ data class ReminderEntity(
             enabled = item.enabled,
             snoozedMinutes = item.snoozedMinutes,
             lastTriggeredMs = item.lastTriggeredMs,
+        )
+    }
+}
+
+@Entity(
+    tableName = "activity_samples",
+    indices = [Index(value = ["timestampMs"], unique = true)],
+)
+data class ActivitySampleEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val timestampMs: Long,
+    val steps: Int,
+    val heartRateBpm: Int? = null,
+    val source: String = "Sensor",
+) {
+    fun toDomain(): ActivitySample = ActivitySample(
+        id = id,
+        timestampMs = timestampMs,
+        steps = steps,
+        heartRateBpm = heartRateBpm,
+        source = source,
+    )
+
+    companion object {
+        fun fromDomain(sample: ActivitySample): ActivitySampleEntity = ActivitySampleEntity(
+            id = sample.id,
+            timestampMs = sample.timestampMs,
+            steps = sample.steps,
+            heartRateBpm = sample.heartRateBpm,
+            source = sample.source,
         )
     }
 }

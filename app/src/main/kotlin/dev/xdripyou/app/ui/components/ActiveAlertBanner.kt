@@ -38,12 +38,63 @@ fun ActiveAlertBanner(
     onSnooze: (Int) -> Unit,
     onStop: () -> Unit,
     onOpenCustomSnooze: (() -> Unit)? = null,
+    compactMode: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val containerColor = if (alert.isSnoozed) scheme.secondaryContainer else scheme.errorContainer
+    val containerColor = if (alert.isSnoozed) scheme.secondaryContainer.copy(alpha = 0.72f) else scheme.errorContainer.copy(alpha = 0.85f)
     val contentColor = if (alert.isSnoozed) scheme.onSecondaryContainer else scheme.onErrorContainer
     val remainingMins = ((alert.nextAlertAtMs - nowMs) / 60_000L).coerceAtLeast(0L)
+
+    if (compactMode) {
+        androidx.compose.material3.Surface(
+            modifier = modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            color = containerColor,
+            contentColor = contentColor,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(
+                    imageVector = if (alert.isSnoozed) Icons.Rounded.Snooze else Icons.Rounded.NotificationsActive,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+                Text(
+                    text = if (alert.isSnoozed) {
+                        "${alert.ruleName} (${remainingMins}m)"
+                    } else {
+                        "${alert.ruleName} · ${GlucoseUnit.formatValue(alert.triggerMgdl, useMgdl)}"
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
+                )
+                androidx.compose.material3.TextButton(
+                    onClick = { onSnooze(20) },
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                    modifier = Modifier.height(28.dp),
+                ) { Text("20m", style = MaterialTheme.typography.labelSmall) }
+                if (onOpenCustomSnooze != null) {
+                    androidx.compose.material3.TextButton(
+                        onClick = onOpenCustomSnooze,
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                        modifier = Modifier.height(28.dp),
+                    ) { Text("···", style = MaterialTheme.typography.labelSmall) }
+                }
+                androidx.compose.material3.TextButton(
+                    onClick = onStop,
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                    modifier = Modifier.height(28.dp),
+                ) { Text(if (alert.isSnoozed) "Aus" else "Stop", style = MaterialTheme.typography.labelSmall) }
+            }
+        }
+        return
+    }
 
     Card(
         modifier = modifier.fillMaxWidth(),

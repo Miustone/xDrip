@@ -9,6 +9,7 @@ import dev.xdripyou.app.data.InsertOutcome
 import dev.xdripyou.app.data.SettingsStore
 import dev.xdripyou.app.domain.AapsProfileImporter
 import dev.xdripyou.app.domain.ActiveAlertState
+import dev.xdripyou.app.domain.ActivitySample
 import dev.xdripyou.app.domain.AgpStatsCalculator
 import dev.xdripyou.app.domain.AlertProfile
 import dev.xdripyou.app.domain.AlertRule
@@ -64,9 +65,13 @@ data class MainUiState(
     val permissions: PermissionStatus = PermissionStatus(),
     val calibrations: List<CalibrationRecord> = emptyList(),
     val reminders: List<ReminderItem> = emptyList(),
+    val activitySamples24h: List<ActivitySample> = emptyList(),
     val nowMs: Long = System.currentTimeMillis(),
 ) {
     val latestReading: GlucoseReading? get() = readings24h.firstOrNull()
+
+    val todaySteps: Int
+        get() = activitySamples24h.sumOf { it.steps }
 
     val slopeIntercept: SlopeIntercept
         get() = CalibrationEngine.calculateByAlgorithm(
@@ -182,8 +187,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         healthConnectGrantedFlow,
         repo.observeCalibrations(30),
         repo.observeReminders(),
-    ) { pumpStatus, hcGranted, cals, reminders ->
-        SyncAndExtraBundle(pumpStatus, hcGranted, cals, reminders)
+        repo.observeActivitySamplesSince(since24h),
+    ) { pumpStatus, hcGranted, cals, reminders, activitySamples ->
+        SyncAndExtraBundle(pumpStatus, hcGranted, cals, reminders, activitySamples)
     }
 
     val uiState: StateFlow<MainUiState> = combine(
@@ -209,6 +215,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             permissions = meta.perms,
             calibrations = extra.calibrations,
             reminders = extra.reminders,
+            activitySamples24h = extra.activitySamples,
             nowMs = nowMs,
         )
     }.stateIn(
@@ -1165,11 +1172,93 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setNumberWallConfig(
+        enabled: Boolean,
+        tiled: Boolean,
+        dynamicColor: Boolean,
+        opacityPercent: Int,
+    ) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.NUMBER_WALL_ENABLED] = enabled
+                it[SettingsStore.Keys.NUMBER_WALL_TILED] = tiled
+                it[SettingsStore.Keys.NUMBER_WALL_DYNAMIC_COLOR] = dynamicColor
+                it[SettingsStore.Keys.NUMBER_WALL_OPACITY] = opacityPercent.coerceIn(30, 100)
+            }
+            if (enabled) {
+                val snap = uiState.value
+                dev.xdripyou.app.service.LockScreenNumberWall.refreshIfEnabled(
+                    context = app,
+                    latest = snap.latestReading,
+                    settings = snap.settings.copy(
+                        numberWallEnabled = enabled,
+                        numberWallTiled = tiled,
+                        numberWallDynamicColor = dynamicColor,
+                        numberWallOpacity = opacityPercent.coerceIn(30, 100),
+                    ),
+                    iobUnits = snap.iobCob.iobUnits,
+                    todaySteps = snap.todaySteps,
+                )
+            }
+        }
+    }
+
+    fun refreshNumberWallNow(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val snap = uiState.value
+            val res = dev.xdripyou.app.service.LockScreenNumberWall.refreshIfEnabled(
+                context = app,
+                latest = snap.latestReading,
+                settings = snap.settings.copy(numberWallEnabled = true),
+                iobUnits = snap.iobCob.iobUnits,
+                todaySteps = snap.todaySteps,
+            )
+            onResult(res.getOrElse { "Zahlenwand-Fehler: ${it.message}" })
+        }
+    }
+
+    fun clearNumberWallNow(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val res = dev.xdripyou.app.service.LockScreenNumberWall.clearLockscreenWallpaper(app)
+            onResult(res.getOrElse { "Fehler: ${it.message}" })
+        }
+    }
+
+    fun setAodConfig(enabled: Boolean, opacityPercent: Int, burnInShift: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.AOD_ENABLED] = enabled
+                it[SettingsStore.Keys.AOD_OPACITY] = opacityPercent.coerceIn(30, 100)
+                it[SettingsStore.Keys.AOD_BURN_IN_SHIFT] = burnInShift
+            }
+            dev.xdripyou.app.service.AlwaysOnDisplayService.notifyUpdate(app)
+        }
+    }
+
+    fun setGraphAndStepsConfig(
+        showStepsCounter: Boolean,
+        showStepsInChart: Boolean,
+        showBasalInChart: Boolean,
+        dotSizeDp: Int,
+        compactAlertBanner: Boolean,
+    ) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.SHOW_STEPS_COUNTER] = showStepsCounter
+                it[SettingsStore.Keys.SHOW_STEPS_IN_CHART] = showStepsInChart
+                it[SettingsStore.Keys.SHOW_BASAL_IN_CHART] = showBasalInChart
+                it[SettingsStore.Keys.CHART_DOT_SIZE_DP] = dotSizeDp.coerceIn(2, 7)
+                it[SettingsStore.Keys.COMPACT_ALERT_BANNER] = compactAlertBanner
+            }
+        }
+    }
+
     private data class SyncAndExtraBundle(
         val pumpStatus: ExternalPumpStatus?,
         val hcGranted: Boolean,
         val calibrations: List<CalibrationRecord>,
         val reminders: List<ReminderItem>,
+        val activitySamples: List<ActivitySample>,
     )
 
     private data class PrimaryBundle(

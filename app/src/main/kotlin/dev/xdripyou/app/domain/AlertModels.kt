@@ -220,6 +220,26 @@ data class AppSettings(
     val calibrationAlgorithm: String = "xdrip_wls",
     val dexcomTransmitterId: String = "",
     val libreOopBridgeEnabled: Boolean = false,
+    val numberWallEnabled: Boolean = false,
+    val numberWallTiled: Boolean = false,
+    val numberWallDynamicColor: Boolean = true,
+    val numberWallOpacity: Int = 85,
+    val aodEnabled: Boolean = false,
+    val aodOpacityPercent: Int = 80,
+    val aodBurnInShift: Boolean = true,
+    val showStepsCounter: Boolean = true,
+    val showStepsInChart: Boolean = true,
+    val showBasalInChart: Boolean = true,
+    val chartDotSizeDp: Int = 4,
+    val compactAlertBanner: Boolean = true,
+)
+
+data class ActivitySample(
+    val id: Long = 0L,
+    val timestampMs: Long,
+    val steps: Int,
+    val heartRateBpm: Int? = null,
+    val source: String = "Sensor",
 )
 
 data class ReminderItem(

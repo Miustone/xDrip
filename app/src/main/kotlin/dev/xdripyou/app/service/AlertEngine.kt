@@ -120,7 +120,14 @@ class AlertEngine(
 
     suspend fun refreshOngoingNotification() {
         GlucoseWidgetProvider.refreshAll(context)
+        AlwaysOnDisplayService.notifyUpdate(context)
         val settings = repository.settingsStore.current()
+        if (settings.numberWallEnabled) {
+            val latest = repository.getLatestReadings(1).firstOrNull()
+            val iob = if (settings.showIobCob) repository.currentIobCob().iobUnits else 0.0
+            val steps = repository.getActivitySamplesSince(System.currentTimeMillis() - 86_400_000L).sumOf { it.steps }
+            LockScreenNumberWall.refreshIfEnabled(context, latest, settings, iob, steps)
+        }
         if (!settings.foregroundServiceEnabled) return
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(NOTIF_ID_ONGOING, buildOngoingNotification())

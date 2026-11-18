@@ -6,6 +6,23 @@ Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 
 ---
 
+## [26.11.14] - 2026-11-18
+
+### Hinzugefügt & Verbessert (Classic-xDrip-Proportionen, Zahlenwand, AOD, Schritte & Detailsuche)
+- **Übersichts-Proportionen & ruhigere Alarme (`OverviewScreen.kt`, `ActiveAlertBanner.kt`, `GlucoseChart.kt`):**
+  - Kompaktere Zahlenwerte (`38.sp` statt `54.sp`), schlanke unaufdringliche Alarm-Leiste (`compactAlertBanner`) und deutlich größerer zentraler **xDrip-Hauptgraph** (~70 % Bildschirmhöhe) mit **Insulin (Bolus-Balken, IOB-Kurve, Basal-Profil)**, **Kohlenhydraten**, **Fingerstich-Werten**, **Schritten / Aktivitätsbalken** und einstellbarer **Punktegröße (2–7 dp)**.
+- **Zahlenwand auf dem Sperrbildschirm (`LockScreenNumberWall.kt`):**
+  - Rendert Live-Blutzucker, Trendpfeil, IOB und Schritte direkt auf das Sperrbildschirm-Wallpaper (`WallpaperManager.FLAG_LOCK`) – wahlweise als Kachel-Muster oder zentrierte Karte mit BZ-Zielbereichsfarben und Deckkraft.
+- **Always On Display Overlay (`AlwaysOnDisplayService.kt`):**
+  - Accessibility-Overlay (`TYPE_ACCESSIBILITY_OVERLAY`) für gesperrte / ausgeschaltete Bildschirme inkl. OLED-Einbrennschutz-Verschiebung.
+- **Aktivitäts- & Schrittzähler (`StepTrackerManager.kt`, Room Migration `3 → 4`):**
+  - Erfasst Schritte über Android `TYPE_STEP_COUNTER` in 5-Minuten-Blöcken (`activity_samples`), zeigt sie in Übersicht & Chart an.
+- **Aufgeräumte Detailsuche in den Einstellungen (`SettingsScreen.kt`):**
+  - Die Einstellungs-Suche findet ab sofort **einzelne Unter-Optionen direkt** (über 20 Einzeleinträge mit direktem Sprung in die jeweilige Unterseite) statt nur ganzer Kategorien.
+- **Versionsstand:** `versionName = "26.11.14-rc1"`, `versionCode = 261114`.
+
+---
+
 ## [26.11.13] - 2026-11-18
 
 ### Hinzugefügt & Portiert (Dexcom G7 / OB1 BLE-Kollektor & Libre 2/3 Bridge)

@@ -103,6 +103,8 @@ fun OverviewScreen(
                         nowMs = state.nowMs,
                         onSnooze = onSnoozeAlert,
                         onStop = onStopAlert,
+                        onOpenCustomSnooze = { showSnoozeSheet = true },
+                        compactMode = settings.compactAlertBanner,
                     )
                 }
                 if (!state.permissions.coreReady || !state.permissions.ignoringBatteryOptimizations) {
@@ -157,6 +159,7 @@ fun OverviewScreen(
                     onSnooze = onSnoozeAlert,
                     onStop = onStopAlert,
                     onOpenCustomSnooze = { showSnoozeSheet = true },
+                    compactMode = settings.compactAlertBanner,
                 )
             }
 
@@ -250,221 +253,125 @@ private fun HeroGlucoseCard(
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = scheme.surfaceContainerLow),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Surface(
-                    color = scheme.secondaryContainer,
-                    shape = RoundedCornerShape(999.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            Icons.Rounded.Sensors,
-                            contentDescription = null,
-                            modifier = Modifier.size(13.dp),
-                            tint = scheme.onSecondaryContainer,
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            text = latest?.source ?: "CamAPS FX",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = scheme.onSecondaryContainer,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-
-                if (latest != null) {
-                    val mins = latest.minutesAgoAt(state.nowMs)
-                    val ageLabel = if (mins == 0L) "jetzt" else "vor ${mins}m"
-                    Surface(
-                        color = if (isStale) scheme.errorContainer else scheme.surfaceContainerHigh,
-                        shape = RoundedCornerShape(999.dp),
-                    ) {
-                        Text(
-                            text = if (isStale) "Veraltet · $ageLabel" else ageLabel,
-                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (isStale) scheme.onErrorContainer else scheme.onSurfaceVariant,
-                            maxLines = 1,
-                        )
-                    }
-                }
-            }
-
             if (latest == null) {
-                Text(
-                    text = "---",
-                    fontSize = 48.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = scheme.onSurfaceVariant,
-                )
-                Text(
-                    text = "Warte auf Messwerte…",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = scheme.onSurfaceVariant,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalButton(
-                        onClick = onSeedDemo,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                    ) {
-                        Icon(Icons.Rounded.Timeline, null, Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Demo", maxLines = 1)
-                    }
-                    OutlinedButton(
-                        onClick = onOpenSettingsTab,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                    ) {
-                        Icon(Icons.Rounded.Science, null, Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Quelle", maxLines = 1)
-                    }
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Text(
-                        text = GlucoseUnit.formatValue(latest.mgdl, settings.useMgdl),
-                        fontSize = if (compactMode) 48.sp else 54.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = (-1.5).sp,
-                        color = bgColor,
-                        textDecoration = if (isStale) TextDecoration.LineThrough else null,
-                    )
-                    Column {
-                        Text(
-                            text = latest.trend.symbol,
-                            fontSize = if (compactMode) 26.sp else 30.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = bgColor,
-                        )
-                        Text(
-                            text = GlucoseUnit.unitLabel(settings.useMgdl),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = scheme.onSurfaceVariant,
-                        )
-                    }
-                    Spacer(Modifier.weight(1f))
-                    if (deltaMgdl != null) {
-                        Surface(
-                            color = bgColor.copy(alpha = 0.14f),
-                            shape = RoundedCornerShape(14.dp),
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                horizontalAlignment = Alignment.End,
-                            ) {
-                                Text(
-                                    text = GlucoseUnit.formatDelta(deltaMgdl, settings.useMgdl),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = bgColor,
-                                )
-                                Text(
-                                    text = latest.trend.labelDe,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = scheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Compact meta + IOB/COB + "+ Eintrag" row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        val iobCob = state.iobCob
-                        val basalRate = state.currentBasalRate
-                        val pump = state.externalPumpStatus
-                        val pumpFresh = pump != null && (state.nowMs - pump.timestampMs) <= 3_600_000L
-                        if (iobCob.hasActiveIob || iobCob.hasActiveCob || basalRate != null || (pumpFresh && pump?.reservoirUnits != null)) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                if (iobCob.hasActiveIob) {
-                                    SmallPill(
-                                        text = "IOB ${String.format(Locale.US, "%.2f", iobCob.iobUnits)} IE",
-                                        container = scheme.primaryContainer,
-                                        content = scheme.onPrimaryContainer,
-                                    )
-                                }
-                                if (iobCob.hasActiveCob) {
-                                    SmallPill(
-                                        text = "COB ${iobCob.cobGrams.toInt()} g",
-                                        container = scheme.secondaryContainer,
-                                        content = scheme.onSecondaryContainer,
-                                    )
-                                }
-                                if (basalRate != null) {
-                                    SmallPill(
-                                        text = "Basal ${String.format(Locale.US, "%.2f", basalRate)}",
-                                        container = scheme.tertiaryContainer,
-                                        content = scheme.onTertiaryContainer,
-                                    )
-                                }
-                                if (pumpFresh && pump?.reservoirUnits != null) {
-                                    SmallPill(
-                                        text = "${pump.reservoirUnits.toInt()} E",
-                                        container = scheme.surfaceContainerHigh,
-                                        content = scheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
+                    Column {
+                        Text("---", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = scheme.onSurfaceVariant)
+                        Text("Warte auf Messwerte…", style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilledTonalButton(onClick = onSeedDemo, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)) {
+                            Text("Demo", style = MaterialTheme.typography.labelMedium)
                         }
-                        val metaParts = buildList {
-                            state.predictions.lastOrNull()?.let { pred ->
-                                add("30m ~${GlucoseUnit.formatValue(pred.mgdl, settings.useMgdl)}")
-                            }
-                            if (settings.sensorStartedAtMs > 0L) {
-                                val ageHours = ((state.nowMs - settings.sensorStartedAtMs) / 3_600_000L).coerceAtLeast(0L)
-                                add("Sensor ${ageHours / 24}T ${ageHours % 24}h")
-                            }
-                        }
-                        if (metaParts.isNotEmpty()) {
-                            Text(
-                                text = metaParts.joinToString(" · "),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = scheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                        OutlinedButton(onClick = onOpenSettingsTab, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)) {
+                            Text("Quelle", style = MaterialTheme.typography.labelMedium)
                         }
                     }
-
-                    Spacer(Modifier.width(8.dp))
+                }
+            } else {
+                val mins = latest.minutesAgoAt(state.nowMs)
+                val ageLabel = if (mins == 0L) "jetzt" else "vor ${mins}m"
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = GlucoseUnit.formatValue(latest.mgdl, settings.useMgdl),
+                        fontSize = if (compactMode) 34.sp else 38.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = (-1.0).sp,
+                        color = bgColor,
+                        textDecoration = if (isStale) TextDecoration.LineThrough else null,
+                    )
+                    Text(
+                        text = latest.trend.symbol,
+                        fontSize = if (compactMode) 20.sp else 24.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = bgColor,
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = GlucoseUnit.unitLabel(settings.useMgdl),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = scheme.onSurfaceVariant,
+                            )
+                            if (deltaMgdl != null) {
+                                Text(
+                                    text = GlucoseUnit.formatDelta(deltaMgdl, settings.useMgdl),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = bgColor,
+                                )
+                            }
+                        }
+                        Text(
+                            text = (if (isStale) "Veraltet · $ageLabel" else ageLabel) + " · ${latest.source}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isStale) scheme.error else scheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     FilledTonalButton(
                         onClick = onAddTreatmentClick,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                        modifier = Modifier.height(34.dp),
                     ) {
-                        Icon(Icons.Rounded.Add, null, Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Eintrag", maxLines = 1)
+                        Icon(Icons.Rounded.Add, null, Modifier.size(15.dp))
+                        Spacer(Modifier.width(3.dp))
+                        Text("Eintrag", style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                    }
+                }
+
+                // Slim status row: IOB, COB, Basal, Schritte & 30m Prediction
+                val iobCob = state.iobCob
+                val basalRate = state.currentBasalRate
+                val pump = state.externalPumpStatus
+                val pumpFresh = pump != null && (state.nowMs - pump.timestampMs) <= 3_600_000L
+                val steps = state.todaySteps
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    if (iobCob.hasActiveIob) {
+                        SmallPill("IOB ${String.format(Locale.US, "%.2f", iobCob.iobUnits)}E", scheme.primaryContainer, scheme.onPrimaryContainer)
+                    }
+                    if (iobCob.hasActiveCob) {
+                        SmallPill("COB ${iobCob.cobGrams.toInt()}g", scheme.secondaryContainer, scheme.onSecondaryContainer)
+                    }
+                    if (basalRate != null) {
+                        SmallPill("B ${String.format(Locale.US, "%.2f", basalRate)}", scheme.tertiaryContainer, scheme.onTertiaryContainer)
+                    }
+                    if (settings.showStepsCounter && steps > 0) {
+                        SmallPill("Schritte $steps", scheme.surfaceContainerHigh, scheme.onSurfaceVariant)
+                    }
+                    if (pumpFresh && pump?.reservoirUnits != null) {
+                        SmallPill("${pump.reservoirUnits.toInt()}E", scheme.surfaceContainerHigh, scheme.onSurfaceVariant)
+                    }
+                    Spacer(Modifier.weight(1f))
+                    state.predictions.lastOrNull()?.let { pred ->
+                        Text(
+                            text = "30m ~${GlucoseUnit.formatValue(pred.mgdl, settings.useMgdl)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = scheme.onSurfaceVariant,
+                            maxLines = 1,
+                        )
                     }
                 }
             }
@@ -524,6 +431,11 @@ private fun ChartPanelCard(
                 insulinDurationMinutes = if (preset == dev.xdripyou.app.domain.InsulinPreset.CUSTOM) settings.insulinDurationMinutes else preset.durationMinutes,
                 insulinPeakMinutes = if (preset == dev.xdripyou.app.domain.InsulinPreset.CUSTOM) settings.insulinPeakMinutes else preset.peakMinutes,
                 insulinOnsetMinutes = if (preset == dev.xdripyou.app.domain.InsulinPreset.CUSTOM) 15 else preset.onsetMinutes,
+                activitySamples = state.activitySamples24h,
+                showStepsInChart = settings.showStepsInChart,
+                showBasalInChart = settings.showBasalInChart && settings.showBasalRate,
+                basalSchedule = if (settings.showBasalRate) state.basalSchedule else null,
+                dotSizeDp = settings.chartDotSizeDp,
                 chartHeight = null,
                 modifier = Modifier.weight(1f),
             )
@@ -544,14 +456,14 @@ private fun CompactStatsCard(
     val scheme = MaterialTheme.colorScheme
     val glucoseColors = LocalGlucoseColors.current
     Card(
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = scheme.surfaceContainerLow),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),

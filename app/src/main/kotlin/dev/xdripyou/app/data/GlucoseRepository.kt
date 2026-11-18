@@ -1,6 +1,7 @@
 package dev.xdripyou.app.data
 
 import dev.xdripyou.app.data.db.ActiveAlertEntity
+import dev.xdripyou.app.data.db.ActivitySampleEntity
 import dev.xdripyou.app.data.db.AlertRuleEntity
 import dev.xdripyou.app.data.db.AppDatabase
 import dev.xdripyou.app.data.db.BgReadingEntity
@@ -9,6 +10,7 @@ import dev.xdripyou.app.data.db.CollectorEventEntity
 import dev.xdripyou.app.data.db.ReminderEntity
 import dev.xdripyou.app.data.db.TreatmentEntity
 import dev.xdripyou.app.domain.ActiveAlertState
+import dev.xdripyou.app.domain.ActivitySample
 import dev.xdripyou.app.domain.AlertRule
 import dev.xdripyou.app.domain.CalibrationEngine
 import dev.xdripyou.app.domain.CalibrationRecord
@@ -507,12 +509,44 @@ class GlucoseRepository(
                 eventType = "Correction Bolus",
             )
         )
+        // Seed sample hourly activity / steps so the graph reflects movement
+        for (h in 11 downTo 0) {
+            val bucketTs = now - h * 3_600_000L
+            val demoSteps = ((kotlin.math.sin((12 - h) * 0.65) + 1.1) * 280).roundToInt().coerceAtLeast(35)
+            recordActivitySample(timestampMs = bucketTs, steps = demoSteps, source = "Demo")
+        }
+    }
+
+    fun observeActivitySamplesSince(sinceMs: Long): Flow<List<ActivitySample>> =
+        db.activitySampleDao().observeSince(sinceMs).map { list -> list.map { it.toDomain() } }
+
+    suspend fun getActivitySamplesSince(sinceMs: Long): List<ActivitySample> =
+        db.activitySampleDao().getSince(sinceMs).map { it.toDomain() }
+
+    suspend fun recordActivitySample(
+        timestampMs: Long,
+        steps: Int,
+        heartRateBpm: Int? = null,
+        source: String = "Sensor",
+    ) {
+        if (steps <= 0 && heartRateBpm == null) return
+        db.activitySampleDao().upsert(
+            ActivitySampleEntity.fromDomain(
+                ActivitySample(
+                    timestampMs = timestampMs,
+                    steps = steps.coerceAtLeast(0),
+                    heartRateBpm = heartRateBpm,
+                    source = source,
+                )
+            )
+        )
     }
 
     suspend fun clearAllReadings() {
         db.bgReadingDao().deleteAll()
         db.treatmentDao().deleteAll()
         db.collectorEventDao().deleteAll()
+        db.activitySampleDao().deleteAll()
         settingsStore.resetCompanionJamState()
     }
 
