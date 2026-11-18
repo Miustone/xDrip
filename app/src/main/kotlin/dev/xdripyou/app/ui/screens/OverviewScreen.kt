@@ -391,7 +391,10 @@ private fun HeroGlucoseCard(
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         val iobCob = state.iobCob
-                        if (iobCob.hasActiveIob || iobCob.hasActiveCob) {
+                        val basalRate = state.currentBasalRate
+                        val pump = state.externalPumpStatus
+                        val pumpFresh = pump != null && (state.nowMs - pump.timestampMs) <= 3_600_000L
+                        if (iobCob.hasActiveIob || iobCob.hasActiveCob || basalRate != null || (pumpFresh && pump?.reservoirUnits != null)) {
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 if (iobCob.hasActiveIob) {
                                     SmallPill(
@@ -405,6 +408,20 @@ private fun HeroGlucoseCard(
                                         text = "COB ${iobCob.cobGrams.toInt()} g",
                                         container = scheme.secondaryContainer,
                                         content = scheme.onSecondaryContainer,
+                                    )
+                                }
+                                if (basalRate != null) {
+                                    SmallPill(
+                                        text = "Basal ${String.format(Locale.US, "%.2f", basalRate)}",
+                                        container = scheme.tertiaryContainer,
+                                        content = scheme.onTertiaryContainer,
+                                    )
+                                }
+                                if (pumpFresh && pump?.reservoirUnits != null) {
+                                    SmallPill(
+                                        text = "${pump.reservoirUnits.toInt()} E",
+                                        container = scheme.surfaceContainerHigh,
+                                        content = scheme.onSurfaceVariant,
                                     )
                                 }
                             }

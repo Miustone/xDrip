@@ -2,25 +2,35 @@ package dev.xdripyou.app.ui
 
 import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ShowChart
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.NightsStay
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -33,8 +43,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import dev.xdripyou.app.ui.screens.AlertsScreen
+import dev.xdripyou.app.ui.screens.BedsideScreen
 import dev.xdripyou.app.ui.screens.HistoryScreen
 import dev.xdripyou.app.ui.screens.OnboardingWizard
 import dev.xdripyou.app.ui.screens.OverviewScreen
@@ -90,9 +107,18 @@ fun XdripYouRoot(
 
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var settingsSection by rememberSaveable { mutableStateOf(SettingsSection.HUB) }
+    var bedsideMode by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    if (bedsideMode) {
+        BedsideScreen(
+            state = state,
+            onExit = { bedsideMode = false },
+        )
+        return
+    }
 
     BackHandler(enabled = selectedTab == 3 && settingsSection != SettingsSection.HUB) {
         settingsSection = SettingsSection.HUB
@@ -123,40 +149,25 @@ fun XdripYouRoot(
                             }
                         }
                     },
+                    actions = {
+                        if (selectedTab == 0) {
+                            IconButton(onClick = { bedsideMode = true }) {
+                                Icon(Icons.Rounded.NightsStay, contentDescription = "Nachttisch-Modus")
+                            }
+                        }
+                    },
                 )
             }
         },
         bottomBar = {
             if (!isLandscape) {
-                NavigationBar {
-                    NavigationBarItem(
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        icon = { Icon(Icons.AutoMirrored.Rounded.ShowChart, contentDescription = null) },
-                        label = { Text("Übersicht") },
-                    )
-                    NavigationBarItem(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        icon = { Icon(Icons.Rounded.NotificationsActive, contentDescription = null) },
-                        label = { Text("Alarme") },
-                    )
-                    NavigationBarItem(
-                        selected = selectedTab == 2,
-                        onClick = { selectedTab = 2 },
-                        icon = { Icon(Icons.Rounded.History, contentDescription = null) },
-                        label = { Text("Verlauf") },
-                    )
-                    NavigationBarItem(
-                        selected = selectedTab == 3,
-                        onClick = {
-                            if (selectedTab == 3) settingsSection = SettingsSection.HUB
-                            selectedTab = 3
-                        },
-                        icon = { Icon(Icons.Rounded.Tune, contentDescription = null) },
-                        label = { Text("Optionen") },
-                    )
-                }
+                CompactBottomNavBar(
+                    selectedTab = selectedTab,
+                    onSelectTab = { tab ->
+                        if (tab == 3 && selectedTab == 3) settingsSection = SettingsSection.HUB
+                        selectedTab = tab
+                    },
+                )
             }
         },
     ) { innerPadding ->
@@ -249,6 +260,8 @@ fun XdripYouRoot(
                 onSetBroadcastSnoozeConfig = viewModel::setBroadcastSnoozeConfig,
                 onSetIobCobConfig = viewModel::setIobCobConfig,
                 onSetBolusProfileConfig = viewModel::setBolusProfileConfig,
+                onSetBasalProfileConfig = viewModel::setBasalProfileConfig,
+                onSetNightscoutDeviceStatusEnabled = viewModel::setNightscoutDeviceStatusEnabled,
                 onSetDexcomShareConfig = viewModel::setDexcomShareConfig,
                 onSyncDexcomShareNow = { cb ->
                     viewModel.syncDexcomShareNow { msg ->
@@ -276,6 +289,74 @@ fun XdripYouRoot(
                 onSetThemeMode = viewModel::setThemeMode,
                 modifier = mod,
             )
+        }
+    }
+}
+
+private data class NavTabMeta(val index: Int, val label: String, val icon: ImageVector)
+
+@Composable
+private fun CompactBottomNavBar(
+    selectedTab: Int,
+    onSelectTab: (Int) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val tabs = listOf(
+        NavTabMeta(0, "Übersicht", Icons.AutoMirrored.Rounded.ShowChart),
+        NavTabMeta(1, "Alarme", Icons.Rounded.NotificationsActive),
+        NavTabMeta(2, "Verlauf", Icons.Rounded.History),
+        NavTabMeta(3, "Optionen", Icons.Rounded.Tune),
+    )
+
+    Surface(
+        color = scheme.surfaceContainer,
+        tonalElevation = 3.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .height(56.dp)
+                .padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.SpaceAround,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            tabs.forEach { tab ->
+                val selected = selectedTab == tab.index
+                val pillBg = if (selected) scheme.secondaryContainer else Color.Transparent
+                val fg = if (selected) scheme.onSecondaryContainer else scheme.onSurfaceVariant
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { onSelectTab(tab.index) }
+                        .padding(vertical = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(pillBg)
+                            .padding(horizontal = 14.dp, vertical = 3.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = tab.icon,
+                            contentDescription = tab.label,
+                            tint = fg,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                    Text(
+                        text = tab.label,
+                        fontSize = 11.sp,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                        color = fg,
+                        maxLines = 1,
+                    )
+                }
+            }
         }
     }
 }

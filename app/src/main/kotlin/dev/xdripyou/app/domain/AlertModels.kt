@@ -171,6 +171,9 @@ data class AppSettings(
     val carbRatioGramsPerUnit: Double = 10.0,
     val isfMgdlPerUnit: Double = 40.0,
     val bolusTargetMgdl: Double = 110.0,
+    val showBasalRate: Boolean = false,
+    val basalScheduleWire: String = "",
+    val nightscoutDeviceStatusEnabled: Boolean = true,
     val dynamicColorEnabled: Boolean = true,
     val themeMode: ThemeModeOption = ThemeModeOption.SYSTEM,
 )

@@ -349,6 +349,12 @@ fun GlucoseChart(
                         treatLabelPaint,
                     )
                 }
+                val bgMgdl = t.bloodGlucoseMgdl
+                if (bgMgdl != null && bgMgdl > 0.0) {
+                    val by = yForMgdl(bgMgdl)
+                    drawCircle(color = glucoseColors.low, radius = 10f, center = Offset(tx, by))
+                    drawCircle(color = scheme.surface, radius = 5.5f, center = Offset(tx, by))
+                }
             }
 
             // 6. Curve + points (chronological)

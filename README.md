@@ -2,7 +2,7 @@
 
 Modernisierte, aufgeräumte Neuimplementierung von xDrip in **100 % Kotlin + Jetpack Compose + Material 3 You**, aufbauend auf diesem Fork von `NightscoutFoundation/xDrip` (unveränderter Upstream-Stand liegt auf Branch `master`, aktive Entwicklung läuft auf `main` bzw. `kotlin-jetpack-you`).
 
-Aktuelle Version: **`26.11.6`** (`YY.MM.AppVersion`, Details in [CHANGELOG.md](CHANGELOG.md)).
+Aktuelle Version: **`26.11.7`** (`YY.MM.AppVersion`, Details in [CHANGELOG.md](CHANGELOG.md)).
 
 ## Enthaltene Features
 - **Ersteinrichtungs-Assistent (First-Run Setup Wizard)**:
@@ -10,9 +10,9 @@ Aktuelle Version: **`26.11.6`** (`YY.MM.AppVersion`, Details in [CHANGELOG.md](C
 - **CamAPS FX & Companion App Collector** (`CamApsNotificationListenerService`):
   - Übernimmt laufende Blutzucker-Benachrichtigungen von `com.camdiab.fx_alert.*` (`RemoteViews` + `Notification.extras`) sowie optional von weiteren CGM-/Pumpen-Companion-Apps (Dexcom G6/G7/ONE/Stelo, Medtronic Guardian/Simplera/MiniMed, Eversense, Aidex, Ottai, Sinocare, Diabeloop).
   - Automatische Einheitserkennung (`mg/dL` & `mmol/L` inkl. Komma-Format), Deduplizierung (`10s` / `250s`), Jam-Schutz & Live-Diagnoseprotokoll.
-- **Material 3 You Übersicht, Vorhersage & Chart**:
-  - Android 12+ **Dynamic Color** (Wallpaper-Farben), Hell-/Dunkel-/System-Modus und optionaler Nachttisch-Modus (`keepScreenOn`).
-  - Interaktiver Compose-Canvas-Glukoseverlauf (`3h / 6h / 12h / 24h`) mit Zielbereichsband, Touch-Scrubbing, **30-Min.-Vorhersage-Kurve**, **Therapie-Markern**, Punktdarstellung, Rasterlinien, Durchschnittslinie und anpassbarer Y-Achsen-Skala.
+- **Material 3 You Übersicht, Nachttisch-Modus & Chart**:
+  - Android 12+ **Dynamic Color** (Wallpaper-Farben), Hell-/Dunkel-/System-Modus, optionaler Nachttisch-Modus (`keepScreenOn`) sowie Vollbild-OLED-Nachttischuhr (`BedsideScreen`).
+  - Kompakte Übersicht ohne vertikales Scrollen (Querformat ohne Navigationsleiste) mit **Fingerstich-Markern**, **30-Min.-Vorhersage-Kurve**, **Therapie-Markern**, Punktdarstellung, Rasterlinien, Durchschnittslinie und anpassbarer Y-Achsen-Skala.
   - Konfigurierbare 24h-Statistikzeile (TIR, Durchschnitt, GMI und Variabilität CV %) sowie Sensor-Session-Tracking inkl. Ablauf-Vorwarnung.
 - **Therapie-Tagebuch, IOB/COB & Mehr-Tage-AGP**:
   - Schnelle Erfassung und Bearbeitung von Mahlzeiten/Bolus (IE), Kohlenhydraten (g), Fingerstich-BZ und Notizen.

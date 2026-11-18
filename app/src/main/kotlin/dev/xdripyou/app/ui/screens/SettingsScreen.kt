@@ -62,6 +62,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -74,6 +75,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.xdripyou.app.BuildConfig
+import dev.xdripyou.app.domain.BasalSchedule
 import dev.xdripyou.app.domain.CamApsParser
 import dev.xdripyou.app.domain.GlucoseUnit
 import dev.xdripyou.app.domain.SourceUnitMode
@@ -175,6 +177,7 @@ fun SettingsScreen(
     onTestSpeech: () -> Unit,
     onSetNightscoutConfig: (String, String, Boolean, Boolean) -> Unit,
     onSetNightscoutExtraConfig: (Boolean, Boolean) -> Unit,
+    onSetNightscoutDeviceStatusEnabled: (Boolean) -> Unit,
     onSyncNightscoutNow: ((String) -> Unit) -> Unit,
     onSetLocalBroadcastEnabled: (Boolean) -> Unit,
     onSetBroadcastTargetPackage: (String) -> Unit,
@@ -182,6 +185,7 @@ fun SettingsScreen(
     onSetBroadcastSnoozeConfig: (Boolean, Boolean) -> Unit,
     onSetIobCobConfig: (Boolean, Int, Int, Int, Int) -> Unit,
     onSetBolusProfileConfig: (Double, Double, Double) -> Unit,
+    onSetBasalProfileConfig: (Boolean, BasalSchedule) -> Unit,
     onSetDexcomShareConfig: (Boolean, Boolean, String, String) -> Unit,
     onSyncDexcomShareNow: ((String) -> Unit) -> Unit,
     onSetLocalWebServiceConfig: (Boolean, Boolean, String) -> Unit,
@@ -261,6 +265,7 @@ fun SettingsScreen(
             onSetKeepScreenOn = onSetKeepScreenOn,
             onSetIobCobConfig = onSetIobCobConfig,
             onSetBolusProfileConfig = onSetBolusProfileConfig,
+            onSetBasalProfileConfig = onSetBasalProfileConfig,
             onSetDynamicColor = onSetDynamicColor,
             onSetThemeMode = onSetThemeMode,
             modifier = modifier,
@@ -269,6 +274,7 @@ fun SettingsScreen(
             state = state,
             onSetNightscoutConfig = onSetNightscoutConfig,
             onSetNightscoutExtraConfig = onSetNightscoutExtraConfig,
+            onSetNightscoutDeviceStatusEnabled = onSetNightscoutDeviceStatusEnabled,
             onSyncNightscoutNow = onSyncNightscoutNow,
             onSetLocalBroadcastEnabled = onSetLocalBroadcastEnabled,
             onSetBroadcastTargetPackage = onSetBroadcastTargetPackage,
@@ -798,6 +804,7 @@ private fun SettingsDisplayPage(
     onSetKeepScreenOn: (Boolean) -> Unit,
     onSetIobCobConfig: (Boolean, Int, Int, Int, Int) -> Unit,
     onSetBolusProfileConfig: (Double, Double, Double) -> Unit,
+    onSetBasalProfileConfig: (Boolean, BasalSchedule) -> Unit,
     onSetDynamicColor: (Boolean) -> Unit,
     onSetThemeMode: (ThemeModeOption) -> Unit,
     modifier: Modifier = Modifier,
@@ -978,6 +985,64 @@ private fun SettingsDisplayPage(
         }
 
         item {
+            val schedule = state.basalSchedule
+            var selectedHour by remember { mutableIntStateOf(0) }
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("Basal-Profil (24-Std.)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    SwitchRow(
+                        "Aktuelle Basalrate in Übersicht anzeigen",
+                        "Tagesgesamtbasal: ${String.format(Locale.US, "%.1f", schedule.totalDailyUnits)} IE/Tag",
+                        settings.showBasalRate,
+                        { onSetBasalProfileConfig(it, schedule) },
+                    )
+                    if (settings.showBasalRate) {
+                        val maxRate = (schedule.hourlyRates.maxOrNull() ?: 1.0).coerceAtLeast(1.0)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalAlignment = Alignment.Bottom,
+                        ) {
+                            schedule.hourlyRates.forEachIndexed { hr, rate ->
+                                val frac = (rate / maxRate).toFloat().coerceIn(0.08f, 1f)
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height((42.dp * frac))
+                                        .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp))
+                                        .background(
+                                            if (hr == selectedHour) MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                                        )
+                                        .clickable { selectedHour = hr },
+                                )
+                            }
+                        }
+                        val hourRate = schedule.hourlyRates[selectedHour]
+                        Text(
+                            text = "${String.format("%02d", selectedHour)}:00 Uhr → ${String.format(Locale.US, "%.2f", hourRate)} IE/Std.",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Slider(
+                            value = hourRate.toFloat(),
+                            onValueChange = {
+                                val rounded = (it * 20f).roundToInt() / 20.0
+                                onSetBasalProfileConfig(true, schedule.withRate(selectedHour, rounded))
+                            },
+                            valueRange = 0f..3.0f,
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
             Card(shape = RoundedCornerShape(24.dp)) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -1006,6 +1071,7 @@ private fun SettingsCloudPage(
     state: MainUiState,
     onSetNightscoutConfig: (String, String, Boolean, Boolean) -> Unit,
     onSetNightscoutExtraConfig: (Boolean, Boolean) -> Unit,
+    onSetNightscoutDeviceStatusEnabled: (Boolean) -> Unit,
     onSyncNightscoutNow: ((String) -> Unit) -> Unit,
     onSetLocalBroadcastEnabled: (Boolean) -> Unit,
     onSetBroadcastTargetPackage: (String) -> Unit,
@@ -1063,6 +1129,12 @@ private fun SettingsCloudPage(
                     SwitchRow("Nur im WLAN synchronisieren", null, settings.nightscoutWifiOnly) {
                         onSetNightscoutExtraConfig(settings.nightscoutUploadTreatments, it)
                     }
+                    SwitchRow(
+                        "DeviceStatus & Pumpendaten syncen",
+                        "Sendet Telefon-Akku & lädt Pumpen-IOB/Reservoir (AAPS/CamAPS)",
+                        settings.nightscoutDeviceStatusEnabled,
+                        onSetNightscoutDeviceStatusEnabled,
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(
                             onClick = {

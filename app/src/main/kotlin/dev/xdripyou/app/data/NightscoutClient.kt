@@ -1,5 +1,6 @@
 package dev.xdripyou.app.data
 
+import dev.xdripyou.app.domain.ExternalPumpStatus
 import dev.xdripyou.app.domain.GlucoseReading
 import dev.xdripyou.app.domain.TreatmentEntry
 import dev.xdripyou.app.domain.TrendArrow
@@ -95,6 +96,39 @@ object NightscoutClient {
         return out
     }
 
+    fun parseDeviceStatusJson(jsonText: String): ExternalPumpStatus? {
+        val array = JSONArray(jsonText)
+        for (i in 0 until array.length()) {
+            val obj = array.optJSONObject(i) ?: continue
+            val createdStr = obj.optString("created_at", "")
+            val ts = obj.optLong("mills", -1L).takeIf { it > 0L }
+                ?: createdStr.takeIf { it.isNotBlank() }?.let {
+                    runCatching { Instant.parse(it).toEpochMilli() }.getOrNull()
+                }
+                ?: System.currentTimeMillis()
+            val openaps = obj.optJSONObject("openaps")
+            val iobObj = openaps?.optJSONObject("iob")
+            val suggestedObj = openaps?.optJSONObject("suggested") ?: openaps?.optJSONObject("enacted")
+            val pumpObj = obj.optJSONObject("pump")
+            val iob = iobObj?.optDouble("iob", Double.NaN)?.takeIf { !it.isNaN() }
+            val cob = suggestedObj?.optDouble("COB", Double.NaN)?.takeIf { !it.isNaN() }
+            val reservoir = pumpObj?.optDouble("reservoir", Double.NaN)?.takeIf { !it.isNaN() && it >= 0.0 }
+            val pumpBatt = pumpObj?.optJSONObject("battery")?.optInt("percent", -1)?.takeIf { it in 0..100 }
+            val uploaderBatt = obj.optInt("uploaderBattery", -1).takeIf { it in 0..100 }
+            if (iob != null || cob != null || reservoir != null || pumpBatt != null || uploaderBatt != null) {
+                return ExternalPumpStatus(
+                    timestampMs = ts,
+                    iobUnits = iob,
+                    cobGrams = cob,
+                    reservoirUnits = reservoir,
+                    pumpBatteryPercent = pumpBatt,
+                    uploaderBatteryPercent = uploaderBatt,
+                )
+            }
+        }
+        return null
+    }
+
     fun readingToNightscoutJson(reading: GlucoseReading): JSONObject = JSONObject().apply {
         put("type", "sgv")
         put("sgv", reading.mgdl.roundToInt())
@@ -175,6 +209,63 @@ object NightscoutClient {
                 conn.disconnect()
             }
         }
+    }
+
+    suspend fun fetchLatestDeviceStatus(
+        baseUrl: String,
+        apiSecret: String,
+    ): Result<ExternalPumpStatus?> = withContext(Dispatchers.IO) {
+        runCatching {
+            val base = normalizeBaseUrl(baseUrl)
+            require(base.isNotBlank()) { "Nightscout-URL fehlt" }
+            val conn = (URL("$base/api/v1/devicestatus.json?count=5").openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 10_000
+                readTimeout = 10_000
+                setRequestProperty("Accept", "application/json")
+                if (apiSecret.isNotBlank()) {
+                    setRequestProperty("api-secret", sha1Hex(apiSecret.trim()))
+                }
+            }
+            try {
+                val code = conn.responseCode
+                if (code !in 200..299) {
+                    error("Nightscout HTTP $code")
+                }
+                val body = conn.inputStream.bufferedReader().use { it.readText() }
+                parseDeviceStatusJson(body)
+            } finally {
+                conn.disconnect()
+            }
+        }
+    }
+
+    suspend fun uploadDeviceStatus(
+        baseUrl: String,
+        apiSecret: String,
+        uploaderBatteryPercent: Int?,
+        iobUnits: Double?,
+        cobGrams: Double?,
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        val payload = JSONObject().apply {
+            put("device", "xDrip2You")
+            put("created_at", Instant.now().toString())
+            if (uploaderBatteryPercent != null) {
+                put("uploaderBattery", uploaderBatteryPercent)
+                put("uploader", JSONObject().apply { put("battery", uploaderBatteryPercent) })
+            }
+            if (iobUnits != null || cobGrams != null) {
+                put("openaps", JSONObject().apply {
+                    if (iobUnits != null) {
+                        put("iob", JSONObject().apply { put("iob", iobUnits) })
+                    }
+                    if (cobGrams != null) {
+                        put("suggested", JSONObject().apply { put("COB", cobGrams) })
+                    }
+                })
+            }
+        }.toString()
+        postJson("$baseUrl/api/v1/devicestatus", apiSecret, payload)
     }
 
     suspend fun uploadReadings(

@@ -57,7 +57,7 @@ class GlucoseForegroundService : Service() {
                         wifiOk
                     ) {
                         val beforeLatest = app.repository.getLatestReadings(1).firstOrNull()?.timestampMs ?: 0L
-                        app.repository.syncNightscout()
+                        app.repository.syncNightscout(SystemPermissionsHelper.getBatteryPercent(this@GlucoseForegroundService))
                         val afterLatest = app.repository.getLatestReadings(1).firstOrNull()
                         if (afterLatest != null && afterLatest.timestampMs > beforeLatest) {
                             app.alertEngine.refreshOngoingNotification()

@@ -11,10 +11,12 @@ import dev.xdripyou.app.domain.AgpStatsCalculator
 import dev.xdripyou.app.domain.AlertProfile
 import dev.xdripyou.app.domain.AlertRule
 import dev.xdripyou.app.domain.AppSettings
+import dev.xdripyou.app.domain.BasalSchedule
 import dev.xdripyou.app.domain.CamApsParser
 import dev.xdripyou.app.domain.ChartWindow
 import dev.xdripyou.app.domain.CollectorEvent
 import dev.xdripyou.app.domain.ExtendedGlucoseStats
+import dev.xdripyou.app.domain.ExternalPumpStatus
 import dev.xdripyou.app.domain.GlucosePredictor
 import dev.xdripyou.app.domain.GlucoseReading
 import dev.xdripyou.app.domain.GlucoseStats
@@ -50,13 +52,32 @@ data class MainUiState(
     val chartWindow: ChartWindow = ChartWindow.SIX_HOURS,
     val statsPeriod: StatsPeriod = StatsPeriod.DAY_1,
     val extendedStats: ExtendedGlucoseStats = ExtendedGlucoseStats(),
+    val externalPumpStatus: ExternalPumpStatus? = null,
     val permissions: PermissionStatus = PermissionStatus(),
     val nowMs: Long = System.currentTimeMillis(),
 ) {
     val latestReading: GlucoseReading? get() = readings24h.firstOrNull()
 
+    val basalSchedule: BasalSchedule
+        get() = BasalSchedule.decodeWire(settings.basalScheduleWire)
+
+    val currentBasalRate: Double?
+        get() = if (settings.showBasalRate) basalSchedule.rateAt(nowMs) else null
+
     val iobCob: IobCobSnapshot
-        get() = IobCobCalculator.snapshot(treatments24h, nowMs, settings)
+        get() {
+            val local = IobCobCalculator.snapshot(treatments24h, nowMs, settings)
+            val ext = externalPumpStatus
+            val extFresh = ext != null && (nowMs - ext.timestampMs) <= 1_800_000L
+            return if (extFresh && !local.hasActiveIob && ext?.iobUnits != null) {
+                IobCobSnapshot(
+                    iobUnits = ext.iobUnits,
+                    cobGrams = ext.cobGrams ?: local.cobGrams,
+                )
+            } else {
+                local
+            }
+        }
 
     val latestDeltaMgdl: Double?
         get() {
@@ -139,8 +160,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val uiState: StateFlow<MainUiState> = combine(
         primaryDataFlow,
         metaFlow,
+        repo.externalPumpStatusFlow,
         nowMsFlow,
-    ) { primary, meta, nowMs ->
+    ) { primary, meta, pumpStatus, nowMs ->
         MainUiState(
             isLoaded = true,
             settings = primary.settings,
@@ -152,6 +174,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             chartWindow = meta.window,
             statsPeriod = meta.statsPeriod,
             extendedStats = meta.extendedStats,
+            externalPumpStatus = pumpStatus,
             permissions = meta.perms,
             nowMs = nowMs,
         )
@@ -349,6 +372,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 it[SettingsStore.Keys.ISF_MGDL] = isfMgdlPerUnit.coerceIn(10.0, 200.0)
                 it[SettingsStore.Keys.BOLUS_TARGET_MGDL] = bolusTargetMgdl.coerceIn(70.0, 180.0)
             }
+        }
+    }
+
+    fun setBasalProfileConfig(showBasalRate: Boolean, schedule: BasalSchedule) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.SHOW_BASAL_RATE] = showBasalRate
+                it[SettingsStore.Keys.BASAL_SCHEDULE_WIRE] = schedule.encodeWire()
+            }
+        }
+    }
+
+    fun setNightscoutDeviceStatusEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.NS_DEVICE_STATUS] = enabled }
         }
     }
 
@@ -658,7 +696,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun syncNightscoutNow(onResult: (String) -> Unit) {
         viewModelScope.launch {
-            val res = repo.syncNightscout()
+            val res = repo.syncNightscout(SystemPermissionsHelper.getBatteryPercent(app))
             nowMsFlow.value = System.currentTimeMillis()
             alertEngine.refreshOngoingNotification()
             onResult(res.getOrElse { "Fehler: ${it.message}" })

@@ -6,6 +6,23 @@ Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 
 ---
 
+## [26.11.7] - 2026-11-18
+
+### Hinzugefügt & Verbessert
+- **Schlankere Navigationsleiste (`XdripYouRoot.kt`):**
+  - Kompakte Material-3-You-Navigationsleiste (`56.dp` statt `80.dp` Höhe) für mehr vertikalen Platz auf der Übersicht.
+- **OLED Vollbild-Nachttisch-Modus (`BedsideScreen.kt`, `XdripYouRoot.kt`):**
+  - Über das Mond-Icon in der Top-Leiste der Übersicht aufrufbar: kontrastreiche schwarze Vollbild-Uhr mit großem Blutzuckerwert, Trend, Delta, IOB/COB und aktivem `keepScreenOn`.
+- **24-Stunden-Basalprofil (`BasalProfile.kt`, `SettingsScreen.kt`, `OverviewScreen.kt`):**
+  - Portierung von xDrips `BasalProfile` (24 stündliche Basalraten mit Tagesgesamtbasal-Anzeige, interaktivem Balken-Editor und optionalem `Basal`-Chip auf der Übersicht).
+- **Nightscout DeviceStatus & Pumpendaten (`NightscoutClient.kt`, `GlucoseRepository.kt`):**
+  - Synchronisiert Phone-Akku + IOB/COB zu `/api/v1/devicestatus` und übernimmt optional externe Loop-/Pumpendaten (IOB, COB, Reservoir) im Follower-Betrieb.
+- **Fingerstich-Marker im Chart (`GlucoseChart.kt`):**
+  - Zeichnet `Fingerstich`-Einträge als Kalibrierungs-/Kontrollringe direkt auf dem jeweiligen BZ-Niveau im Verlauf-Chart.
+- **Versionsstand:** `versionName = "26.11.7"`, `versionCode = 261107`.
+
+---
+
 ## [26.11.6] - 2026-11-18
 
 ### Hinzugefügt & Optimiert

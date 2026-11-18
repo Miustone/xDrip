@@ -116,7 +116,7 @@ class CamApsNotificationListenerService : NotificationListenerService() {
                 if (currentSettings.nightscoutUploadEnabled &&
                     (!currentSettings.nightscoutWifiOnly || SystemPermissionsHelper.isOnWifi(this))
                 ) {
-                    repo.syncNightscout()
+                    repo.syncNightscout(SystemPermissionsHelper.getBatteryPercent(this))
                 }
             }
             is InsertOutcome.Deduplicated -> {

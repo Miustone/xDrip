@@ -10,12 +10,15 @@ import dev.xdripyou.app.domain.ActiveAlertState
 import dev.xdripyou.app.domain.AlertRule
 import dev.xdripyou.app.domain.CamApsParser
 import dev.xdripyou.app.domain.CollectorEvent
+import dev.xdripyou.app.domain.ExternalPumpStatus
 import dev.xdripyou.app.domain.GlucoseReading
 import dev.xdripyou.app.domain.IobCobCalculator
 import dev.xdripyou.app.domain.IobCobSnapshot
 import dev.xdripyou.app.domain.TreatmentEntry
 import dev.xdripyou.app.domain.TrendArrow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -34,6 +37,8 @@ class GlucoseRepository(
     val settingsStore: SettingsStore,
 ) {
     private val insertMutex = Mutex()
+    private val _externalPumpStatus = MutableStateFlow<ExternalPumpStatus?>(null)
+    val externalPumpStatusFlow: Flow<ExternalPumpStatus?> = _externalPumpStatus.asStateFlow()
 
     fun observeReadingsSince(sinceMs: Long, limit: Int = 600): Flow<List<GlucoseReading>> =
         db.bgReadingDao().observeSince(sinceMs, limit).map { list -> list.map { it.toDomain() } }
@@ -166,7 +171,7 @@ class GlucoseRepository(
         InsertOutcome.Inserted(entity.copy(id = rowId).toDomain())
     }
 
-    suspend fun syncNightscout(): Result<String> {
+    suspend fun syncNightscout(uploaderBatteryPercent: Int? = null): Result<String> {
         val settings = settingsStore.current()
         if (settings.nightscoutUrl.isBlank()) {
             return Result.failure(IllegalStateException("Keine Nightscout-URL hinterlegt"))
@@ -210,6 +215,11 @@ class GlucoseRepository(
                     }
                 }
             }
+
+            if (settings.nightscoutDeviceStatusEnabled) {
+                NightscoutClient.fetchLatestDeviceStatus(settings.nightscoutUrl, settings.nightscoutApiSecret)
+                    .getOrNull()?.let { _externalPumpStatus.value = it }
+            }
         }
 
         if (settings.nightscoutUploadEnabled) {
@@ -237,6 +247,17 @@ class GlucoseRepository(
                     db.treatmentDao().markSynced(unsyncedTreatments.map { it.id })
                     uploadedTreatments = unsyncedTreatments.size
                 }
+            }
+
+            if (settings.nightscoutDeviceStatusEnabled) {
+                val iobCob = currentIobCob()
+                NightscoutClient.uploadDeviceStatus(
+                    baseUrl = settings.nightscoutUrl,
+                    apiSecret = settings.nightscoutApiSecret,
+                    uploaderBatteryPercent = uploaderBatteryPercent,
+                    iobUnits = if (iobCob.hasActiveIob) iobCob.iobUnits else null,
+                    cobGrams = if (iobCob.hasActiveCob) iobCob.cobGrams else null,
+                )
             }
         }
 
