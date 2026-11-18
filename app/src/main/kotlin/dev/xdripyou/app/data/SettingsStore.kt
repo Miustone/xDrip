@@ -143,6 +143,13 @@ class SettingsStore(context: Context) {
         acceptLocalBroadcastReadings = this[Keys.ACCEPT_LOCAL_BROADCAST_READINGS] ?: false,
         broadcastSnoozeEnabled = this[Keys.BROADCAST_SNOOZE_ENABLED] ?: false,
         acceptBroadcastSnooze = this[Keys.ACCEPT_BROADCAST_SNOOZE] ?: false,
+        dexcomShareEnabled = this[Keys.DEXCOM_SHARE_ENABLED] ?: false,
+        dexcomShareUsAccount = this[Keys.DEXCOM_SHARE_US] ?: false,
+        dexcomShareUsername = this[Keys.DEXCOM_SHARE_USER] ?: "",
+        dexcomSharePassword = this[Keys.DEXCOM_SHARE_PASS] ?: "",
+        carbRatioGramsPerUnit = this[Keys.CARB_RATIO] ?: 10.0,
+        isfMgdlPerUnit = this[Keys.ISF_MGDL] ?: 40.0,
+        bolusTargetMgdl = this[Keys.BOLUS_TARGET_MGDL] ?: 110.0,
         dynamicColorEnabled = this[Keys.DYNAMIC_COLOR] ?: true,
         themeMode = ThemeModeOption.fromWire(this[Keys.THEME_MODE]),
     )
@@ -231,6 +238,13 @@ class SettingsStore(context: Context) {
         val ACCEPT_LOCAL_BROADCAST_READINGS = booleanPreferencesKey("accept_local_broadcast_readings")
         val BROADCAST_SNOOZE_ENABLED = booleanPreferencesKey("broadcast_snooze_enabled")
         val ACCEPT_BROADCAST_SNOOZE = booleanPreferencesKey("accept_broadcast_snooze")
+        val DEXCOM_SHARE_ENABLED = booleanPreferencesKey("dexcom_share_enabled")
+        val DEXCOM_SHARE_US = booleanPreferencesKey("dexcom_share_us")
+        val DEXCOM_SHARE_USER = stringPreferencesKey("dexcom_share_user")
+        val DEXCOM_SHARE_PASS = stringPreferencesKey("dexcom_share_pass")
+        val CARB_RATIO = doublePreferencesKey("carb_ratio")
+        val ISF_MGDL = doublePreferencesKey("isf_mgdl")
+        val BOLUS_TARGET_MGDL = doublePreferencesKey("bolus_target_mgdl")
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val THEME_MODE = stringPreferencesKey("theme_mode")
 

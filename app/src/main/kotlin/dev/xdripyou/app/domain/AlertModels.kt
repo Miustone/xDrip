@@ -164,6 +164,13 @@ data class AppSettings(
     val acceptLocalBroadcastReadings: Boolean = false,
     val broadcastSnoozeEnabled: Boolean = false,
     val acceptBroadcastSnooze: Boolean = false,
+    val dexcomShareEnabled: Boolean = false,
+    val dexcomShareUsAccount: Boolean = false,
+    val dexcomShareUsername: String = "",
+    val dexcomSharePassword: String = "",
+    val carbRatioGramsPerUnit: Double = 10.0,
+    val isfMgdlPerUnit: Double = 40.0,
+    val bolusTargetMgdl: Double = 110.0,
     val dynamicColorEnabled: Boolean = true,
     val themeMode: ThemeModeOption = ThemeModeOption.SYSTEM,
 )

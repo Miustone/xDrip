@@ -64,6 +64,18 @@ class GlucoseForegroundService : Service() {
                             app.alertEngine.evaluateOnNewReading(afterLatest)
                         }
                     }
+                    if (settings.dexcomShareEnabled &&
+                        settings.dexcomShareUsername.isNotBlank() &&
+                        settings.dexcomSharePassword.isNotBlank()
+                    ) {
+                        val beforeLatest = app.repository.getLatestReadings(1).firstOrNull()?.timestampMs ?: 0L
+                        app.repository.syncDexcomShare()
+                        val afterLatest = app.repository.getLatestReadings(1).firstOrNull()
+                        if (afterLatest != null && afterLatest.timestampMs > beforeLatest) {
+                            app.alertEngine.refreshOngoingNotification()
+                            app.alertEngine.evaluateOnNewReading(afterLatest)
+                        }
+                    }
                 }
                 if (tickCount % 60 == 0) {
                     app.repository.pruneExpiredReadings()

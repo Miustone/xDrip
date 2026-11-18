@@ -313,6 +313,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setDexcomShareConfig(
+        enabled: Boolean,
+        usAccount: Boolean,
+        username: String,
+        password: String,
+    ) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.DEXCOM_SHARE_ENABLED] = enabled
+                it[SettingsStore.Keys.DEXCOM_SHARE_US] = usAccount
+                it[SettingsStore.Keys.DEXCOM_SHARE_USER] = username.trim()
+                it[SettingsStore.Keys.DEXCOM_SHARE_PASS] = password
+            }
+        }
+    }
+
+    fun syncDexcomShareNow(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val res = repo.syncDexcomShare()
+            nowMsFlow.value = System.currentTimeMillis()
+            alertEngine.refreshOngoingNotification()
+            onResult(res.getOrElse { "Fehler: ${it.message}" })
+        }
+    }
+
+    fun setBolusProfileConfig(
+        carbRatioGramsPerUnit: Double,
+        isfMgdlPerUnit: Double,
+        bolusTargetMgdl: Double,
+    ) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.CARB_RATIO] = carbRatioGramsPerUnit.coerceIn(2.0, 60.0)
+                it[SettingsStore.Keys.ISF_MGDL] = isfMgdlPerUnit.coerceIn(10.0, 200.0)
+                it[SettingsStore.Keys.BOLUS_TARGET_MGDL] = bolusTargetMgdl.coerceIn(70.0, 180.0)
+            }
+        }
+    }
+
     fun setDynamicColor(enabled: Boolean) {
         viewModelScope.launch {
             settingsStore.update { it[SettingsStore.Keys.DYNAMIC_COLOR] = enabled }

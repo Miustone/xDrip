@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -65,6 +66,7 @@ fun GlucoseChart(
     showGrid: Boolean = true,
     showAverageLine: Boolean = false,
     chartMaxMgdl: Int = 0,
+    chartHeight: Dp? = 210.dp,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -148,10 +150,13 @@ fun GlucoseChart(
 
         Spacer(Modifier.height(8.dp))
 
+        val canvasSizeMod = if (chartHeight != null) {
+            Modifier.fillMaxWidth().height(chartHeight)
+        } else {
+            Modifier.fillMaxWidth().weight(1f)
+        }
         Canvas(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(230.dp)
+            modifier = canvasSizeMod
                 .pointerInput(readings, nowMs, windowMs, futureHorizonMs) {
                     detectTapGestures { offset ->
                         pickNearest(offset.x, size.width.toFloat())

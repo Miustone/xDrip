@@ -181,6 +181,9 @@ fun SettingsScreen(
     onSetAcceptLocalBroadcastReadings: (Boolean) -> Unit,
     onSetBroadcastSnoozeConfig: (Boolean, Boolean) -> Unit,
     onSetIobCobConfig: (Boolean, Int, Int, Int, Int) -> Unit,
+    onSetBolusProfileConfig: (Double, Double, Double) -> Unit,
+    onSetDexcomShareConfig: (Boolean, Boolean, String, String) -> Unit,
+    onSyncDexcomShareNow: ((String) -> Unit) -> Unit,
     onSetLocalWebServiceConfig: (Boolean, Boolean, String) -> Unit,
     onSetRetentionDays: (Int) -> Unit,
     onExportJson: () -> Unit,
@@ -226,6 +229,8 @@ fun SettingsScreen(
             onStopSensorSession = onStopSensorSession,
             onSetSensorExpiryConfig = onSetSensorExpiryConfig,
             onSetAcceptLocalBroadcastReadings = onSetAcceptLocalBroadcastReadings,
+            onSetDexcomShareConfig = onSetDexcomShareConfig,
+            onSyncDexcomShareNow = onSyncDexcomShareNow,
             modifier = modifier,
         )
         SettingsSection.ALARMS -> SettingsAlarmsOptionsPage(
@@ -255,6 +260,7 @@ fun SettingsScreen(
             onSetShowExtraStatusLine = onSetShowExtraStatusLine,
             onSetKeepScreenOn = onSetKeepScreenOn,
             onSetIobCobConfig = onSetIobCobConfig,
+            onSetBolusProfileConfig = onSetBolusProfileConfig,
             onSetDynamicColor = onSetDynamicColor,
             onSetThemeMode = onSetThemeMode,
             modifier = modifier,
@@ -449,11 +455,16 @@ private fun SettingsSourcesPage(
     onStopSensorSession: () -> Unit,
     onSetSensorExpiryConfig: (Int, Boolean) -> Unit,
     onSetAcceptLocalBroadcastReadings: (Boolean) -> Unit,
+    onSetDexcomShareConfig: (Boolean, Boolean, String, String) -> Unit,
+    onSyncDexcomShareNow: ((String) -> Unit) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
     val settings = state.settings
     var customPkgsText by remember(settings.customPackages) { mutableStateOf(settings.customPackages) }
+    var shareUserText by remember(settings.dexcomShareUsername) { mutableStateOf(settings.dexcomShareUsername) }
+    var sharePassText by remember(settings.dexcomSharePassword) { mutableStateOf(settings.dexcomSharePassword) }
+    var shareFeedback by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -576,6 +587,61 @@ private fun SettingsSourcesPage(
                         settings.sensorExpiryAlertEnabled,
                         { onSetSensorExpiryConfig(settings.sensorExpectedDays, it) },
                     )
+                }
+            }
+        }
+
+        item {
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("Dexcom Share Follower", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    SwitchRow(
+                        "Dexcom Share Follower aktiv",
+                        "Ruft Werte alle 5 Min. direkt von Dexcom Share ab",
+                        settings.dexcomShareEnabled,
+                        { onSetDexcomShareConfig(it, settings.dexcomShareUsAccount, shareUserText, sharePassText) },
+                    )
+                    SwitchRow(
+                        "US-Server verwenden (share2.dexcom.com)",
+                        "Aus = EU / International (shareous1.dexcom.com)",
+                        settings.dexcomShareUsAccount,
+                        { onSetDexcomShareConfig(settings.dexcomShareEnabled, it, shareUserText, sharePassText) },
+                    )
+                    OutlinedTextField(
+                        value = shareUserText,
+                        onValueChange = { shareUserText = it },
+                        label = { Text("Dexcom Share Benutzername / E-Mail") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = sharePassText,
+                        onValueChange = { sharePassText = it },
+                        label = { Text("Passwort") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                onSetDexcomShareConfig(settings.dexcomShareEnabled, settings.dexcomShareUsAccount, shareUserText, sharePassText)
+                                shareFeedback = "Zugangsdaten gespeichert"
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Speichern") }
+                        Button(
+                            onClick = {
+                                onSetDexcomShareConfig(settings.dexcomShareEnabled, settings.dexcomShareUsAccount, shareUserText, sharePassText)
+                                onSyncDexcomShareNow { shareFeedback = it }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Jetzt abrufen") }
+                    }
+                    shareFeedback?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = scheme.primary) }
                 }
             }
         }
@@ -731,6 +797,7 @@ private fun SettingsDisplayPage(
     onSetShowExtraStatusLine: (Boolean) -> Unit,
     onSetKeepScreenOn: (Boolean) -> Unit,
     onSetIobCobConfig: (Boolean, Int, Int, Int, Int) -> Unit,
+    onSetBolusProfileConfig: (Double, Double, Double) -> Unit,
     onSetDynamicColor: (Boolean) -> Unit,
     onSetThemeMode: (ThemeModeOption) -> Unit,
     modifier: Modifier = Modifier,
@@ -887,6 +954,25 @@ private fun SettingsDisplayPage(
                             steps = 8,
                         )
                     }
+                    Text(
+                        "Bolus-Rechner: ${String.format(Locale.US, "%.0f", settings.carbRatioGramsPerUnit)} g/IE · ISF ${GlucoseUnit.formatSpread(settings.isfMgdlPerUnit, settings.useMgdl)} · Ziel ${GlucoseUnit.formatValue(settings.bolusTargetMgdl, settings.useMgdl)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text("KH-Faktor (${settings.carbRatioGramsPerUnit.roundToInt()} g pro 1 IE)", style = MaterialTheme.typography.labelSmall)
+                    Slider(
+                        value = settings.carbRatioGramsPerUnit.toFloat(),
+                        onValueChange = { onSetBolusProfileConfig(it.roundToInt().toDouble(), settings.isfMgdlPerUnit, settings.bolusTargetMgdl) },
+                        valueRange = 4f..30f,
+                        steps = 25,
+                    )
+                    Text("Korrekturfaktor / ISF (${GlucoseUnit.formatSpread(settings.isfMgdlPerUnit, settings.useMgdl)} ${GlucoseUnit.unitLabel(settings.useMgdl)} pro 1 IE)", style = MaterialTheme.typography.labelSmall)
+                    Slider(
+                        value = settings.isfMgdlPerUnit.toFloat(),
+                        onValueChange = { onSetBolusProfileConfig(settings.carbRatioGramsPerUnit, (it / 5f).roundToInt() * 5.0, settings.bolusTargetMgdl) },
+                        valueRange = 15f..120f,
+                        steps = 20,
+                    )
                 }
             }
         }

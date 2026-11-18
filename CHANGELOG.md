@@ -6,6 +6,20 @@ Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 
 ---
 
+## [26.11.6] - 2026-11-18
+
+### Hinzugefügt & Optimiert
+- **Kompakte Übersicht ohne Scrollen & Querformat ohne Navigationsleiste (`OverviewScreen.kt`, `XdripYouRoot.kt`, `GlucoseChart.kt`):**
+  - Hochformat zeigt Hero-Glukose, flexiblen Chart und 4er-Statistikleiste gemeinsam auf einem Bildschirm ohne vertikales Scrollen.
+  - Querformat blendet Bottom-NavigationBar (und TopAppBar auf der Übersicht) aus und ordnet Hero-Wert + Statistiken links neben dem maximal großen Verlauf-Chart an.
+- **Dexcom Share Follower (`DexcomShareClient.kt`, `GlucoseRepository.kt`, `GlucoseForegroundService.kt`):**
+  - Portierung von xDrips `ShareFollowDownload`: Direkter Abruf von Dexcom Share (US `share2.dexcom.com` & EU/International `shareous1.dexcom.com`) inkl. 5-Min.-Hintergrundsync und manuellem Abruf unter *Optionen → Datenquellen & Sensor*.
+- **IOB-bewusster Bolus-Rechner (`BolusCalculator.kt`, `TreatmentEditorSheet.kt`):**
+  - Konfigurierbarer KH-Faktor (g/IE) und Korrekturfaktor (ISF) unter *Optionen → Anzeige, IOB/COB & Material 3 You*; automatischer Vorschlag direkt im `+ Eintrag`-Dialog inkl. IOB-Abzug und `Fingerstich`-Eintragstyp.
+- **Versionsstand:** `versionName = "26.11.6"`, `versionCode = 261106`.
+
+---
+
 ## [26.11.5] - 2026-11-18
 
 ### Hinzugefügt & Portiert

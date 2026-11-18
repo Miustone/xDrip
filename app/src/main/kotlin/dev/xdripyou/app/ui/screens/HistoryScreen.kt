@@ -368,6 +368,9 @@ fun HistoryScreen(
         TreatmentEditorSheet(
             useMgdl = settings.useMgdl,
             initialEntry = editingTreatment,
+            bolusSettings = settings,
+            latestBgMgdl = state.latestReading?.mgdl,
+            activeIobUnits = state.iobCob.iobUnits,
             onDismiss = {
                 showTreatmentSheet = false
                 editingTreatment = null

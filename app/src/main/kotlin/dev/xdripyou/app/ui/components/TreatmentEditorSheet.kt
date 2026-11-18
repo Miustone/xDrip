@@ -12,6 +12,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -19,6 +21,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,23 +29,30 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import dev.xdripyou.app.domain.AppSettings
+import dev.xdripyou.app.domain.BolusCalculator
 import dev.xdripyou.app.domain.GlucoseUnit
 import dev.xdripyou.app.domain.TreatmentEntry
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun TreatmentEditorSheet(
     useMgdl: Boolean,
     initialEntry: TreatmentEntry? = null,
+    bolusSettings: AppSettings? = null,
+    latestBgMgdl: Double? = null,
+    activeIobUnits: Double = 0.0,
     onDismiss: () -> Unit,
     onSave: (TreatmentEntry) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val eventTypes = listOf("Meal Bolus", "Correction Bolus", "Carb Correction", "Note")
+    val eventTypes = listOf("Meal Bolus", "Correction Bolus", "Carb Correction", "BG Check", "Note")
 
     var eventType by remember(initialEntry) {
         mutableStateOf(initialEntry?.eventType?.takeIf { it in eventTypes } ?: "Meal Bolus")
@@ -91,6 +101,7 @@ fun TreatmentEditorSheet(
                         "Meal Bolus" -> "Mahlzeit"
                         "Correction Bolus" -> "Korrektur"
                         "Carb Correction" -> "Hypo-KH"
+                        "BG Check" -> "Fingerstich"
                         else -> "Notiz"
                     }
                     FilterChip(
@@ -118,6 +129,57 @@ fun TreatmentEditorSheet(
                     singleLine = true,
                     modifier = Modifier.weight(1f),
                 )
+            }
+
+            if (initialEntry == null && bolusSettings != null && (eventType == "Meal Bolus" || eventType == "Correction Bolus")) {
+                val carbsVal = carbsText.replace(',', '.').toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
+                val enteredBgMgdl = bgText.replace(',', '.').toDoubleOrNull()?.let { GlucoseUnit.toMgdl(it, useMgdl) }
+                val effectiveBg = enteredBgMgdl ?: latestBgMgdl
+                val suggestion = BolusCalculator.calculate(
+                    carbsGrams = carbsVal,
+                    currentBgMgdl = effectiveBg,
+                    activeIobUnits = activeIobUnits,
+                    carbRatioGramsPerUnit = bolusSettings.carbRatioGramsPerUnit,
+                    isfMgdlPerUnit = bolusSettings.isfMgdlPerUnit,
+                    targetBgMgdl = bolusSettings.bolusTargetMgdl,
+                )
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f)),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Bolus-Rechner: ${String.format(Locale.US, "%.1f", suggestion.totalUnits)} IE",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                text = buildString {
+                                    append("Mahlzeit ${String.format(Locale.US, "%.1f", suggestion.mealUnits)}")
+                                    append(" + Korr. ${String.format(Locale.US, "%.1f", suggestion.correctionUnits)}")
+                                    if (suggestion.iobDeductedUnits > 0.0) {
+                                        append(" − IOB ${String.format(Locale.US, "%.1f", suggestion.iobDeductedUnits)}")
+                                    }
+                                    append(" (Orientierung)")
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (suggestion.totalUnits > 0.0) {
+                            TextButton(
+                                onClick = { insulinText = String.format(Locale.US, "%.1f", suggestion.totalUnits) },
+                            ) {
+                                Text("Übernehmen")
+                            }
+                        }
+                    }
+                }
             }
 
             OutlinedTextField(

@@ -1,6 +1,8 @@
 package dev.xdripyou.app.ui
 
+import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -90,6 +92,7 @@ fun XdripYouRoot(
     var settingsSection by rememberSaveable { mutableStateOf(SettingsSection.HUB) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     BackHandler(enabled = selectedTab == 3 && settingsSection != SettingsSection.HUB) {
         settingsSection = SettingsSection.HUB
@@ -105,51 +108,55 @@ fun XdripYouRoot(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = topTitle,
-                        fontWeight = FontWeight.Bold,
-                    )
-                },
-                navigationIcon = {
-                    if (selectedTab == 3 && settingsSection != SettingsSection.HUB) {
-                        IconButton(onClick = { settingsSection = SettingsSection.HUB }) {
-                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Zurück")
+            if (!(isLandscape && selectedTab == 0)) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = topTitle,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    },
+                    navigationIcon = {
+                        if (selectedTab == 3 && settingsSection != SettingsSection.HUB) {
+                            IconButton(onClick = { settingsSection = SettingsSection.HUB }) {
+                                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Zurück")
+                            }
                         }
-                    }
-                },
-            )
+                    },
+                )
+            }
         },
         bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    icon = { Icon(Icons.AutoMirrored.Rounded.ShowChart, contentDescription = null) },
-                    label = { Text("Übersicht") },
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    icon = { Icon(Icons.Rounded.NotificationsActive, contentDescription = null) },
-                    label = { Text("Alarme") },
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 2,
-                    onClick = { selectedTab = 2 },
-                    icon = { Icon(Icons.Rounded.History, contentDescription = null) },
-                    label = { Text("Verlauf") },
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 3,
-                    onClick = {
-                        if (selectedTab == 3) settingsSection = SettingsSection.HUB
-                        selectedTab = 3
-                    },
-                    icon = { Icon(Icons.Rounded.Tune, contentDescription = null) },
-                    label = { Text("Optionen") },
-                )
+            if (!isLandscape) {
+                NavigationBar {
+                    NavigationBarItem(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        icon = { Icon(Icons.AutoMirrored.Rounded.ShowChart, contentDescription = null) },
+                        label = { Text("Übersicht") },
+                    )
+                    NavigationBarItem(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        icon = { Icon(Icons.Rounded.NotificationsActive, contentDescription = null) },
+                        label = { Text("Alarme") },
+                    )
+                    NavigationBarItem(
+                        selected = selectedTab == 2,
+                        onClick = { selectedTab = 2 },
+                        icon = { Icon(Icons.Rounded.History, contentDescription = null) },
+                        label = { Text("Verlauf") },
+                    )
+                    NavigationBarItem(
+                        selected = selectedTab == 3,
+                        onClick = {
+                            if (selectedTab == 3) settingsSection = SettingsSection.HUB
+                            selectedTab = 3
+                        },
+                        icon = { Icon(Icons.Rounded.Tune, contentDescription = null) },
+                        label = { Text("Optionen") },
+                    )
+                }
             }
         },
     ) { innerPadding ->
@@ -241,6 +248,14 @@ fun XdripYouRoot(
                 onSetAcceptLocalBroadcastReadings = viewModel::setAcceptLocalBroadcastReadings,
                 onSetBroadcastSnoozeConfig = viewModel::setBroadcastSnoozeConfig,
                 onSetIobCobConfig = viewModel::setIobCobConfig,
+                onSetBolusProfileConfig = viewModel::setBolusProfileConfig,
+                onSetDexcomShareConfig = viewModel::setDexcomShareConfig,
+                onSyncDexcomShareNow = { cb ->
+                    viewModel.syncDexcomShareNow { msg ->
+                        cb(msg)
+                        scope.launch { snackbarHostState.showSnackbar(msg) }
+                    }
+                },
                 onSetLocalWebServiceConfig = viewModel::setLocalWebServiceConfig,
                 onSetRetentionDays = viewModel::setRetentionDays,
                 onExportJson = onExportJson,

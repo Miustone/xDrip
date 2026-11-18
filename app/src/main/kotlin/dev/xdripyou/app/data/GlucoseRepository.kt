@@ -243,6 +243,30 @@ class GlucoseRepository(
         return Result.success("Sync OK (↓ $pulled Werte / $pulledTreatments Eintr., ↑ $uploadedReadings Werte / $uploadedTreatments Eintr.)")
     }
 
+    suspend fun syncDexcomShare(): Result<String> {
+        val settings = settingsStore.current()
+        val res = DexcomShareClient.fetchLatestReadings(
+            username = settings.dexcomShareUsername,
+            password = settings.dexcomSharePassword,
+            usAccount = settings.dexcomShareUsAccount,
+            count = 36,
+        )
+        if (res.isFailure) return Result.failure(res.exceptionOrNull()!!)
+        var pulled = 0
+        for (item in res.getOrThrow().sortedBy { it.timestampMs }) {
+            val out = insertReading(
+                mgdl = item.mgdl,
+                timestampMs = item.timestampMs,
+                source = "Dexcom Share",
+                rawText = null,
+                applyDeduplication = false,
+                overrideTrend = item.trend,
+            )
+            if (out is InsertOutcome.Inserted) pulled++
+        }
+        return Result.success("Dexcom Share OK (↓ $pulled neue Werte)")
+    }
+
     suspend fun exportBackupJson(): String {
         val readings = db.bgReadingDao().getLatest(2000).map { it.toDomain() }
         val treatments = db.treatmentDao().getLatest(500).map { it.toDomain() }

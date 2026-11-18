@@ -2,7 +2,7 @@
 
 Modernisierte, aufgeräumte Neuimplementierung von xDrip in **100 % Kotlin + Jetpack Compose + Material 3 You**, aufbauend auf diesem Fork von `NightscoutFoundation/xDrip` (unveränderter Upstream-Stand liegt auf Branch `master`, aktive Entwicklung läuft auf `main` bzw. `kotlin-jetpack-you`).
 
-Aktuelle Version: **`26.11.5`** (`YY.MM.AppVersion`, Details in [CHANGELOG.md](CHANGELOG.md)).
+Aktuelle Version: **`26.11.6`** (`YY.MM.AppVersion`, Details in [CHANGELOG.md](CHANGELOG.md)).
 
 ## Enthaltene Features
 - **Ersteinrichtungs-Assistent (First-Run Setup Wizard)**:
@@ -24,7 +24,7 @@ Aktuelle Version: **`26.11.5`** (`YY.MM.AppVersion`, Details in [CHANGELOG.md](C
   - **Text-to-Speech (`SpeechHelper`)** für neue Blutzuckerwerte, Trends und Alarme inkl. anpassbarem Sprechtempo.
 - **Aufgeräumter Options-Hub, Ökosystem & Backup**:
   - Suchbarer **5-Kategorien-Options-Hub** (*Datenquellen & Sensor*, *Alarme & Klingeltöne*, *Anzeige & Material 3 You*, *Cloud, Broadcast & Export*, *Diagnose, Labor & Info*).
-  - **Nightscout Integration**: Follower-Abruf (Messwerte + Treatments via REST v1) und Upload (Messwerte + optionale Treatments, optional nur im WLAN) mit SHA-1 `api-secret`.
+  - **Nightscout & Dexcom Share Follower**: Nightscout REST v1 (Messwerte + Treatments Upload & Pull) sowie direkter Dexcom Share Follower (US & EU/International).
   - **Lokaler xDrip-Broadcast & Broadcast-Snooze**: Sendet und empfängt optional `com.eveningoutpost.dexdrip.BgEstimate` sowie `com.eveningoutpost.dexdrip.Snooze` für AAPS, Juggluco, Watchfaces & Tasker.
   - **Lokaler xDrip Web-Service (Port 17580)**: Stellt `/sgv.json`, `/status.json`, `/treatments.json` und `/pebble` lokal bereit.
   - **Material You Homescreen-Widget** (`xDrip 2 You · Blutzucker`), **JSON-Backup (Export/Import)**, **CSV-Export** und automatische Datenbereinigung nach Aufbewahrungsdauer.
