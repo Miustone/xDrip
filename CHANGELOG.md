@@ -6,6 +6,17 @@ Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 
 ---
 
+## [26.11.16] - 2026-11-18
+
+### Behoben (Scroll-/Zoom-Glättung & Insulinkurve)
+- **Flüssigeres Scrollen & Zoomen (`GlucoseChart.kt`, `OverviewScreen.kt`):**
+  - Akkumulativer Touch-State innerhalb der Geste beseitigt 120Hz-State-Jitter; die vollen 24h-Messwerte und -Therapien werden gecacht übergeben und sauber per `clipRect(...)` am linken/rechten Rand zugeschnitten, statt beim Scrollen plötzlich abzubrechen.
+- **Saubere Insulinkurve (IOB):**
+  - IOB-Verlauf berücksichtigt jetzt alle Boli im kompletten 24h-Fenster (inkl. vor dem aktuellen Zoom-Rand abgegebener Boli), nutzt eine stabile Y-Skala ohne Springen beim Verschieben sowie 80 Interpolations-Schritte plus klare obere Konturlinie.
+- **Versionsstand:** `versionName = "26.11.16-rc1"`, `versionCode = 261116`.
+
+---
+
 ## [26.11.15] - 2026-11-18
 
 ### Hinzugefügt & Verbessert (Randloser Graph & Pinch-to-Zoom bis 24 Std.)

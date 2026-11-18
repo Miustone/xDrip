@@ -449,8 +449,8 @@ private fun FullBleedChartPanel(
         ) {
             val preset = dev.xdripyou.app.domain.InsulinPreset.fromWire(settings.insulinPreset)
             GlucoseChart(
-                readings = visibleReadings,
-                treatments = if (settings.showChartTreatments) visibleTreatments else emptyList(),
+                readings = state.readings24h,
+                treatments = if (settings.showChartTreatments) state.treatments24h else emptyList(),
                 predictions = if (panOffsetMs <= 0L) state.predictions else emptyList(),
                 windowMs = zoomWindowMs,
                 nowMs = state.nowMs,
