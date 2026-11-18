@@ -53,4 +53,18 @@ class GlucosePredictorTest {
         val preds = GlucosePredictor.predict(rising, nowMs = now)
         assertNull(GlucosePredictor.minutesUntilBelow(preds, now, 70.0, 30))
     }
+
+    @Test
+    fun `rising curve triggers high prediction`() {
+        val now = 1_700_000_000_000L
+        val risingFast = listOf(
+            GlucoseReading(timestampMs = now, mgdl = 165.0, slopePerMin = 2.6, trend = TrendArrow.SINGLE_UP, source = "Test"),
+            GlucoseReading(timestampMs = now - 300_000L, mgdl = 152.0, slopePerMin = 2.4, trend = TrendArrow.SINGLE_UP, source = "Test"),
+            GlucoseReading(timestampMs = now - 600_000L, mgdl = 140.0, slopePerMin = 2.2, trend = TrendArrow.SINGLE_UP, source = "Test"),
+        )
+        val preds = GlucosePredictor.predict(risingFast, nowMs = now)
+        val mins = GlucosePredictor.minutesUntilAbove(preds, now, 195.0, 30)
+        assertNotNull(mins)
+        assertTrue(mins!! in 5..30)
+    }
 }

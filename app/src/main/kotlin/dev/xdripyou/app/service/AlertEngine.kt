@@ -373,6 +373,34 @@ class AlertEngine(
             }
         }
 
+        // 2b. High prediction alarm
+        if (settings.highPredictionEnabled &&
+            settings.highAlertsDisabledUntilMs <= now &&
+            now - cooldowns.lastHighPredMs >= 900_000L &&
+            latest.mgdl < settings.highPredictionThresholdMgdl
+        ) {
+            val preds = GlucosePredictor.predict(recent24, nowMs = now)
+            val minsUntil = GlucosePredictor.minutesUntilAbove(
+                predictions = preds,
+                baseTimestampMs = latest.timestampMs,
+                thresholdMgdl = settings.highPredictionThresholdMgdl,
+                horizonMinutes = settings.highPredictionHorizonMinutes,
+            )
+            if (minsUntil != null) {
+                repository.settingsStore.setLastHighPredAlertMs(now)
+                val threshStr = GlucoseUnit.formatValue(settings.highPredictionThresholdMgdl, settings.useMgdl)
+                postAlertNotification(
+                    title = "Hoch-Vorhersage · $formatted $unitLabel",
+                    body = "Voraussichtlich über $threshStr $unitLabel in ca. $minsUntil Min.",
+                    overrideSilent = false,
+                    vibrate = true,
+                    volumeFrac = 0.7f,
+                    defaultSnoozeMins = 30,
+                )
+                return
+            }
+        }
+
         // 3. Persistent high alarm
         if (settings.persistentHighEnabled &&
             settings.highAlertsDisabledUntilMs <= now &&

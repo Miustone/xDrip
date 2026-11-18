@@ -59,6 +59,21 @@ class XdripBroadcastReceiver : BroadcastReceiver() {
                             app.alertEngine.evaluateOnNewReading(outcome.reading)
                         }
                     }
+                    ACTION_LOCALE_FIRE -> {
+                        val bundle = intent.getBundleExtra(EXTRA_LOCALE_BUNDLE)
+                        val cmd = bundle?.getString(EXTRA_TASKER_MESSAGE)
+                            ?: intent.getStringExtra(EXTRA_TASKER_MESSAGE)
+                        if (!cmd.isNullOrBlank()) {
+                            TaskerCommandHandler.execute(app, cmd)
+                        }
+                    }
+                    ACTION_TASKER_COMMAND -> {
+                        val cmd = intent.getStringExtra("command")
+                            ?: intent.getStringExtra(EXTRA_TASKER_MESSAGE)
+                        if (!cmd.isNullOrBlank()) {
+                            TaskerCommandHandler.execute(app, cmd)
+                        }
+                    }
                 }
             } finally {
                 pendingResult.finish()
@@ -68,6 +83,10 @@ class XdripBroadcastReceiver : BroadcastReceiver() {
 
     companion object {
         const val ACTION_SNOOZE = "com.eveningoutpost.dexdrip.Snooze"
+        const val ACTION_LOCALE_FIRE = "com.twofortyfouram.locale.intent.action.FIRE_SETTING"
+        const val ACTION_TASKER_COMMAND = "dev.xdripyou.app.TASKER_COMMAND"
+        const val EXTRA_LOCALE_BUNDLE = "com.twofortyfouram.locale.intent.extra.BUNDLE"
+        const val EXTRA_TASKER_MESSAGE = "com.eveningoutpost.dexdrip.localetasker.extra.STRING_MESSAGE"
         const val SENDER_ID_BG = "xDrip 2 You"
         const val SENDER_ID_SNOOZE = "dev.xdripyou.app"
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

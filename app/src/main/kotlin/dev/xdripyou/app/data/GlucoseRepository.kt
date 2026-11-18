@@ -288,6 +288,29 @@ class GlucoseRepository(
         return Result.success("Dexcom Share OK (↓ $pulled neue Werte)")
     }
 
+    suspend fun syncLibreLinkUp(): Result<String> {
+        val settings = settingsStore.current()
+        val res = LibreLinkUpClient.fetchLatestReadings(
+            email = settings.libreLinkEmail,
+            password = settings.libreLinkPassword,
+            region = LibreLinkRegion.fromWire(settings.libreLinkRegion),
+        )
+        if (res.isFailure) return Result.failure(res.exceptionOrNull()!!)
+        var pulled = 0
+        for (item in res.getOrThrow()) {
+            val out = insertReading(
+                mgdl = item.mgdl,
+                timestampMs = item.timestampMs,
+                source = "LibreLinkUp",
+                rawText = null,
+                applyDeduplication = false,
+                overrideTrend = item.trend,
+            )
+            if (out is InsertOutcome.Inserted) pulled++
+        }
+        return Result.success("LibreLinkUp OK (↓ $pulled neue Werte)")
+    }
+
     suspend fun exportBackupJson(): String {
         val readings = db.bgReadingDao().getLatest(2000).map { it.toDomain() }
         val treatments = db.treatmentDao().getLatest(500).map { it.toDomain() }

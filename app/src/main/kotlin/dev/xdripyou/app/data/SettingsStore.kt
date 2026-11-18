@@ -57,6 +57,7 @@ class SettingsStore(context: Context) {
             lastMissedMs = prefs[Keys.LAST_MISSED_ALERT_MS] ?: 0L,
             lastRapidMs = prefs[Keys.LAST_RAPID_ALERT_MS] ?: 0L,
             lastLowPredMs = prefs[Keys.LAST_LOW_PRED_ALERT_MS] ?: 0L,
+            lastHighPredMs = prefs[Keys.LAST_HIGH_PRED_ALERT_MS] ?: 0L,
             lastPersistentHighMs = prefs[Keys.LAST_PERSISTENT_HIGH_ALERT_MS] ?: 0L,
         )
     }
@@ -64,6 +65,7 @@ class SettingsStore(context: Context) {
     suspend fun setLastMissedAlertMs(ts: Long) = update { it[Keys.LAST_MISSED_ALERT_MS] = ts }
     suspend fun setLastRapidAlertMs(ts: Long) = update { it[Keys.LAST_RAPID_ALERT_MS] = ts }
     suspend fun setLastLowPredAlertMs(ts: Long) = update { it[Keys.LAST_LOW_PRED_ALERT_MS] = ts }
+    suspend fun setLastHighPredAlertMs(ts: Long) = update { it[Keys.LAST_HIGH_PRED_ALERT_MS] = ts }
     suspend fun setLastPersistentHighAlertMs(ts: Long) = update { it[Keys.LAST_PERSISTENT_HIGH_ALERT_MS] = ts }
 
     private fun Preferences.toAppSettings(): AppSettings = AppSettings(
@@ -107,6 +109,9 @@ class SettingsStore(context: Context) {
         lowPredictionEnabled = this[Keys.LOW_PRED_ENABLED] ?: false,
         lowPredictionThresholdMgdl = this[Keys.LOW_PRED_THRESHOLD] ?: 70.0,
         lowPredictionHorizonMinutes = this[Keys.LOW_PRED_HORIZON] ?: 25,
+        highPredictionEnabled = this[Keys.HIGH_PRED_ENABLED] ?: false,
+        highPredictionThresholdMgdl = this[Keys.HIGH_PRED_THRESHOLD] ?: 200.0,
+        highPredictionHorizonMinutes = this[Keys.HIGH_PRED_HORIZON] ?: 25,
         persistentHighEnabled = this[Keys.PERSISTENT_HIGH_ENABLED] ?: false,
         persistentHighThresholdMgdl = this[Keys.PERSISTENT_HIGH_THRESHOLD] ?: 180.0,
         persistentHighMinutes = this[Keys.PERSISTENT_HIGH_MINUTES] ?: 60,
@@ -147,6 +152,10 @@ class SettingsStore(context: Context) {
         dexcomShareUsAccount = this[Keys.DEXCOM_SHARE_US] ?: false,
         dexcomShareUsername = this[Keys.DEXCOM_SHARE_USER] ?: "",
         dexcomSharePassword = this[Keys.DEXCOM_SHARE_PASS] ?: "",
+        libreLinkEnabled = this[Keys.LIBRE_LINK_ENABLED] ?: false,
+        libreLinkRegion = this[Keys.LIBRE_LINK_REGION] ?: "eu",
+        libreLinkEmail = this[Keys.LIBRE_LINK_EMAIL] ?: "",
+        libreLinkPassword = this[Keys.LIBRE_LINK_PASS] ?: "",
         carbRatioGramsPerUnit = this[Keys.CARB_RATIO] ?: 10.0,
         isfMgdlPerUnit = this[Keys.ISF_MGDL] ?: 40.0,
         bolusTargetMgdl = this[Keys.BOLUS_TARGET_MGDL] ?: 110.0,
@@ -161,6 +170,7 @@ class SettingsStore(context: Context) {
         val lastMissedMs: Long,
         val lastRapidMs: Long,
         val lastLowPredMs: Long,
+        val lastHighPredMs: Long,
         val lastPersistentHighMs: Long,
     )
 
@@ -205,6 +215,9 @@ class SettingsStore(context: Context) {
         val LOW_PRED_ENABLED = booleanPreferencesKey("low_pred_enabled")
         val LOW_PRED_THRESHOLD = doublePreferencesKey("low_pred_threshold")
         val LOW_PRED_HORIZON = intPreferencesKey("low_pred_horizon")
+        val HIGH_PRED_ENABLED = booleanPreferencesKey("high_pred_enabled")
+        val HIGH_PRED_THRESHOLD = doublePreferencesKey("high_pred_threshold")
+        val HIGH_PRED_HORIZON = intPreferencesKey("high_pred_horizon")
         val PERSISTENT_HIGH_ENABLED = booleanPreferencesKey("persistent_high_enabled")
         val PERSISTENT_HIGH_THRESHOLD = doublePreferencesKey("persistent_high_threshold")
         val PERSISTENT_HIGH_MINUTES = intPreferencesKey("persistent_high_minutes")
@@ -245,6 +258,10 @@ class SettingsStore(context: Context) {
         val DEXCOM_SHARE_US = booleanPreferencesKey("dexcom_share_us")
         val DEXCOM_SHARE_USER = stringPreferencesKey("dexcom_share_user")
         val DEXCOM_SHARE_PASS = stringPreferencesKey("dexcom_share_pass")
+        val LIBRE_LINK_ENABLED = booleanPreferencesKey("libre_link_enabled")
+        val LIBRE_LINK_REGION = stringPreferencesKey("libre_link_region")
+        val LIBRE_LINK_EMAIL = stringPreferencesKey("libre_link_email")
+        val LIBRE_LINK_PASS = stringPreferencesKey("libre_link_pass")
         val CARB_RATIO = doublePreferencesKey("carb_ratio")
         val ISF_MGDL = doublePreferencesKey("isf_mgdl")
         val BOLUS_TARGET_MGDL = doublePreferencesKey("bolus_target_mgdl")
@@ -259,6 +276,7 @@ class SettingsStore(context: Context) {
         val LAST_MISSED_ALERT_MS = longPreferencesKey("last_missed_alert_ms")
         val LAST_RAPID_ALERT_MS = longPreferencesKey("last_rapid_alert_ms")
         val LAST_LOW_PRED_ALERT_MS = longPreferencesKey("last_low_pred_alert_ms")
+        val LAST_HIGH_PRED_ALERT_MS = longPreferencesKey("last_high_pred_alert_ms")
         val LAST_PERSISTENT_HIGH_ALERT_MS = longPreferencesKey("last_persistent_high_alert_ms")
     }
 }

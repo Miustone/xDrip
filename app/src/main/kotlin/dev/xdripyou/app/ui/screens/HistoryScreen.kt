@@ -213,6 +213,15 @@ fun HistoryScreen(
                                 style = MaterialTheme.typography.labelSmall,
                                 color = scheme.onSurfaceVariant,
                             )
+                            if (treatments.isNotEmpty()) {
+                                val totalInsulin = treatments.sumOf { it.insulinUnits }
+                                val totalCarbs = treatments.sumOf { it.carbsGrams }
+                                Text(
+                                    "24h Therapie: ${String.format(Locale.US, "%.1f", totalInsulin)} IE · ${totalCarbs.toInt()} g KH · ${treatments.size} Einträge",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = scheme.primary,
+                                )
+                            }
                             if (showAgpChart) {
                                 Spacer(Modifier.height(4.dp))
                                 PercentileChart(

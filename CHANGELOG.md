@@ -6,6 +6,22 @@ Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 
 ---
 
+## [26.11.8] - 2026-11-18
+
+### Hinzugefügt & Portiert
+- **LibreLinkUp Follower (`LibreLinkUpClient.kt`, `GlucoseRepository.kt`, `GlucoseForegroundService.kt`):**
+  - Direkter Cloud-Follower für FreeStyle LibreLinkUp (Regionen `EU`, `DE`, `US`, `Global` inkl. automatischem Region-Redirect) mit 5-Min.-Hintergrundabruf und Test-Button unter *Optionen → Datenquellen & Sensor*.
+- **Tasker & Automation Bridge (`TaskerCommandHandler.kt`, `LocalWebServer.kt`, `XdripBroadcastReceiver.kt`):**
+  - Portierung von xDrips `FireReceiver` & `WebServiceTasker` (`com.twofortyfouram.locale.intent.action.FIRE_SETTING`, `dev.xdripyou.app.TASKER_COMMAND` sowie `GET /tasker/<befehl>` auf Port `17580`).
+  - Unterstützt `snooze`, `snooze_low`, `snooze_high`, `silence`, `unsilence`, `volume`, `speak`, `carbs`, `insulin`, `bg` und `sync`.
+- **Hoch-Vorhersage-Alarm (`GlucosePredictor.minutesUntilAbove`, `AlertEngine.kt`, `AlertsScreen.kt`):**
+  - Vervollständigt die prädiktive Alarmierung zusätzlich zur Niedrig-Vorhersage (`highPredictionEnabled` & konfigurierbarer Horizont).
+- **24h-Therapie-Bilanz (`HistoryScreen.kt`):**
+  - Zeigt im Verlauf direkt die tägliche Gesamt-Insulinmenge (IE), Gesamtkohlenhydrate (g) und Eintragszahl an.
+- **Versionsstand:** `versionName = "26.11.8"`, `versionCode = 261108`.
+
+---
+
 ## [26.11.7] - 2026-11-18
 
 ### Hinzugefügt & Verbessert

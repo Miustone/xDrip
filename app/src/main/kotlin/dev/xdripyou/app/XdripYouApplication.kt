@@ -8,6 +8,7 @@ import dev.xdripyou.app.service.AlertEngine
 import dev.xdripyou.app.service.LocalWebServer
 import dev.xdripyou.app.service.NotificationChannels
 import dev.xdripyou.app.service.SpeechHelper
+import dev.xdripyou.app.service.TaskerCommandHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,7 +21,9 @@ class XdripYouApplication : Application() {
     val repository: GlucoseRepository by lazy { GlucoseRepository(database, settingsStore) }
     val speechHelper: SpeechHelper by lazy { SpeechHelper(this) }
     val alertEngine: AlertEngine by lazy { AlertEngine(this, repository, speechHelper) }
-    val localWebServer: LocalWebServer by lazy { LocalWebServer(repository) }
+    val localWebServer: LocalWebServer by lazy {
+        LocalWebServer(repository) { cmd -> TaskerCommandHandler.execute(this, cmd) }
+    }
 
     override fun onCreate() {
         super.onCreate()

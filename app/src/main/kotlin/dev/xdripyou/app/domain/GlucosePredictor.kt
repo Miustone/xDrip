@@ -71,4 +71,20 @@ object GlucosePredictor {
         }
         return null
     }
+
+    fun minutesUntilAbove(
+        predictions: List<PredictionPoint>,
+        baseTimestampMs: Long,
+        thresholdMgdl: Double,
+        horizonMinutes: Int,
+    ): Int? {
+        for (pt in predictions) {
+            val minsAhead = ((pt.timestampMs - baseTimestampMs) / 60_000L).toInt()
+            if (minsAhead > horizonMinutes) break
+            if (pt.mgdl >= thresholdMgdl) {
+                return minsAhead.coerceAtLeast(1)
+            }
+        }
+        return null
+    }
 }

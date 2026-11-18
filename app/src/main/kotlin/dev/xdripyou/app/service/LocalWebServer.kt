@@ -145,6 +145,7 @@ object LocalWebPayloads {
  */
 class LocalWebServer(
     private val repository: GlucoseRepository,
+    private val onTaskerCommand: (suspend (String) -> String)? = null,
 ) {
     @Volatile
     private var running = false
@@ -280,8 +281,14 @@ class LocalWebServer(
                     }
                 }
                 else -> {
-                    writeResponse(sock.getOutputStream(), 404, """{"error":"Not Found"}""")
-                    return
+                    if (path.startsWith("/tasker/")) {
+                        val cmd = java.net.URLDecoder.decode(rawTarget.substringBefore('?').substring(8), "UTF-8")
+                        val msg = runBlocking { onTaskerCommand?.invoke(cmd) ?: "Tasker nicht aktiv" }
+                        JSONObject().apply { put("result", msg) }.toString()
+                    } else {
+                        writeResponse(sock.getOutputStream(), 404, """{"error":"Not Found"}""")
+                        return
+                    }
                 }
             }
             writeResponse(sock.getOutputStream(), 200, responseBody)

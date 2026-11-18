@@ -70,6 +70,7 @@ fun AlertsScreen(
     onSetRisingAlert: (Boolean, Double) -> Unit,
     onSetFallingAlert: (Boolean, Double) -> Unit,
     onSetLowPrediction: (Boolean, Double, Int) -> Unit,
+    onSetHighPrediction: (Boolean, Double, Int) -> Unit,
     onSetPersistentHigh: (Boolean, Double, Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -320,6 +321,45 @@ fun AlertsScreen(
                                     onSetLowPrediction(
                                         true,
                                         settings.lowPredictionThresholdMgdl,
+                                        it.roundToInt(),
+                                    )
+                                },
+                                valueRange = 10f..35f,
+                                steps = 4,
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Hoch-Vorhersage")
+                                Text(
+                                    "Warnt wenn in ≤ ${settings.highPredictionHorizonMinutes} Min. über ${GlucoseUnit.formatValue(settings.highPredictionThresholdMgdl, settings.useMgdl)} ${GlucoseUnit.unitLabel(settings.useMgdl)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = scheme.onSurfaceVariant,
+                                )
+                            }
+                            Switch(
+                                checked = settings.highPredictionEnabled,
+                                onCheckedChange = { enabled ->
+                                    onSetHighPrediction(
+                                        enabled,
+                                        settings.highPredictionThresholdMgdl,
+                                        settings.highPredictionHorizonMinutes,
+                                    )
+                                },
+                            )
+                        }
+                        if (settings.highPredictionEnabled) {
+                            Slider(
+                                value = settings.highPredictionHorizonMinutes.toFloat(),
+                                onValueChange = {
+                                    onSetHighPrediction(
+                                        true,
+                                        settings.highPredictionThresholdMgdl,
                                         it.roundToInt(),
                                     )
                                 },

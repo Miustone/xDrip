@@ -75,6 +75,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.xdripyou.app.BuildConfig
+import dev.xdripyou.app.data.LibreLinkRegion
 import dev.xdripyou.app.domain.BasalSchedule
 import dev.xdripyou.app.domain.CamApsParser
 import dev.xdripyou.app.domain.GlucoseUnit
@@ -188,6 +189,8 @@ fun SettingsScreen(
     onSetBasalProfileConfig: (Boolean, BasalSchedule) -> Unit,
     onSetDexcomShareConfig: (Boolean, Boolean, String, String) -> Unit,
     onSyncDexcomShareNow: ((String) -> Unit) -> Unit,
+    onSetLibreLinkConfig: (Boolean, String, String, String) -> Unit,
+    onSyncLibreLinkNow: ((String) -> Unit) -> Unit,
     onSetLocalWebServiceConfig: (Boolean, Boolean, String) -> Unit,
     onSetRetentionDays: (Int) -> Unit,
     onExportJson: () -> Unit,
@@ -235,6 +238,8 @@ fun SettingsScreen(
             onSetAcceptLocalBroadcastReadings = onSetAcceptLocalBroadcastReadings,
             onSetDexcomShareConfig = onSetDexcomShareConfig,
             onSyncDexcomShareNow = onSyncDexcomShareNow,
+            onSetLibreLinkConfig = onSetLibreLinkConfig,
+            onSyncLibreLinkNow = onSyncLibreLinkNow,
             modifier = modifier,
         )
         SettingsSection.ALARMS -> SettingsAlarmsOptionsPage(
@@ -463,6 +468,8 @@ private fun SettingsSourcesPage(
     onSetAcceptLocalBroadcastReadings: (Boolean) -> Unit,
     onSetDexcomShareConfig: (Boolean, Boolean, String, String) -> Unit,
     onSyncDexcomShareNow: ((String) -> Unit) -> Unit,
+    onSetLibreLinkConfig: (Boolean, String, String, String) -> Unit,
+    onSyncLibreLinkNow: ((String) -> Unit) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -471,6 +478,9 @@ private fun SettingsSourcesPage(
     var shareUserText by remember(settings.dexcomShareUsername) { mutableStateOf(settings.dexcomShareUsername) }
     var sharePassText by remember(settings.dexcomSharePassword) { mutableStateOf(settings.dexcomSharePassword) }
     var shareFeedback by remember { mutableStateOf<String?>(null) }
+    var lluEmailText by remember(settings.libreLinkEmail) { mutableStateOf(settings.libreLinkEmail) }
+    var lluPassText by remember(settings.libreLinkPassword) { mutableStateOf(settings.libreLinkPassword) }
+    var lluFeedback by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -648,6 +658,67 @@ private fun SettingsSourcesPage(
                         ) { Text("Jetzt abrufen") }
                     }
                     shareFeedback?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = scheme.primary) }
+                }
+            }
+        }
+
+        item {
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("LibreLinkUp Follower", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    SwitchRow(
+                        "LibreLinkUp Follower aktiv",
+                        "Ruft Werte alle 5 Min. von LibreView / LibreLinkUp ab",
+                        settings.libreLinkEnabled,
+                        { onSetLibreLinkConfig(it, settings.libreLinkRegion, lluEmailText, lluPassText) },
+                    )
+                    Text("Region", style = MaterialTheme.typography.labelLarge, color = scheme.onSurfaceVariant)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        LibreLinkRegion.entries.forEach { region ->
+                            FilterChip(
+                                selected = settings.libreLinkRegion == region.wireValue,
+                                onClick = {
+                                    onSetLibreLinkConfig(settings.libreLinkEnabled, region.wireValue, lluEmailText, lluPassText)
+                                },
+                                label = { Text(region.labelDe) },
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = lluEmailText,
+                        onValueChange = { lluEmailText = it },
+                        label = { Text("LibreLinkUp E-Mail") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = lluPassText,
+                        onValueChange = { lluPassText = it },
+                        label = { Text("Passwort") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                onSetLibreLinkConfig(settings.libreLinkEnabled, settings.libreLinkRegion, lluEmailText, lluPassText)
+                                lluFeedback = "Zugangsdaten gespeichert"
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Speichern") }
+                        Button(
+                            onClick = {
+                                onSetLibreLinkConfig(settings.libreLinkEnabled, settings.libreLinkRegion, lluEmailText, lluPassText)
+                                onSyncLibreLinkNow { lluFeedback = it }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Jetzt abrufen") }
+                    }
+                    lluFeedback?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = scheme.primary) }
                 }
             }
         }
@@ -1227,7 +1298,7 @@ private fun SettingsCloudPage(
                             ) { Text("OK") }
                         }
                         Text(
-                            "Endpunkte: http://127.0.0.1:17580/sgv.json · /pebble · /status.json · /treatments.json",
+                            "Endpunkte: http://127.0.0.1:17580/sgv.json · /pebble · /status.json · /treatments.json · /tasker/snooze",
                             style = MaterialTheme.typography.labelSmall,
                             color = scheme.onSurfaceVariant,
                         )

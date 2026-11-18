@@ -204,6 +204,7 @@ fun XdripYouRoot(
                 onSetRisingAlert = viewModel::setRisingAlert,
                 onSetFallingAlert = viewModel::setFallingAlert,
                 onSetLowPrediction = viewModel::setLowPrediction,
+                onSetHighPrediction = viewModel::setHighPrediction,
                 onSetPersistentHigh = viewModel::setPersistentHigh,
                 modifier = mod,
             )
@@ -265,6 +266,13 @@ fun XdripYouRoot(
                 onSetDexcomShareConfig = viewModel::setDexcomShareConfig,
                 onSyncDexcomShareNow = { cb ->
                     viewModel.syncDexcomShareNow { msg ->
+                        cb(msg)
+                        scope.launch { snackbarHostState.showSnackbar(msg) }
+                    }
+                },
+                onSetLibreLinkConfig = viewModel::setLibreLinkConfig,
+                onSyncLibreLinkNow = { cb ->
+                    viewModel.syncLibreLinkNow { msg ->
                         cb(msg)
                         scope.launch { snackbarHostState.showSnackbar(msg) }
                     }

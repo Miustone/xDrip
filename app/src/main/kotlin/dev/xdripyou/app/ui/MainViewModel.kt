@@ -361,6 +361,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setLibreLinkConfig(
+        enabled: Boolean,
+        region: String,
+        email: String,
+        password: String,
+    ) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.LIBRE_LINK_ENABLED] = enabled
+                it[SettingsStore.Keys.LIBRE_LINK_REGION] = region
+                it[SettingsStore.Keys.LIBRE_LINK_EMAIL] = email.trim()
+                it[SettingsStore.Keys.LIBRE_LINK_PASS] = password
+            }
+        }
+    }
+
+    fun syncLibreLinkNow(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val res = repo.syncLibreLinkUp()
+            nowMsFlow.value = System.currentTimeMillis()
+            alertEngine.refreshOngoingNotification()
+            onResult(res.getOrElse { "Fehler: ${it.message}" })
+        }
+    }
+
     fun setBolusProfileConfig(
         carbRatioGramsPerUnit: Double,
         isfMgdlPerUnit: Double,
@@ -648,6 +673,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 it[SettingsStore.Keys.LOW_PRED_ENABLED] = enabled
                 it[SettingsStore.Keys.LOW_PRED_THRESHOLD] = thresholdMgdl.coerceIn(50.0, 110.0)
                 it[SettingsStore.Keys.LOW_PRED_HORIZON] = horizonMinutes.coerceIn(10, 45)
+            }
+        }
+    }
+
+    fun setHighPrediction(enabled: Boolean, thresholdMgdl: Double, horizonMinutes: Int) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.HIGH_PRED_ENABLED] = enabled
+                it[SettingsStore.Keys.HIGH_PRED_THRESHOLD] = thresholdMgdl.coerceIn(140.0, 300.0)
+                it[SettingsStore.Keys.HIGH_PRED_HORIZON] = horizonMinutes.coerceIn(10, 45)
             }
         }
     }

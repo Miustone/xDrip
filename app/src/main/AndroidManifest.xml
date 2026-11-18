@@ -73,6 +73,8 @@
             <intent-filter>
                 <action android:name="com.eveningoutpost.dexdrip.BgEstimate" />
                 <action android:name="com.eveningoutpost.dexdrip.Snooze" />
+                <action android:name="com.twofortyfouram.locale.intent.action.FIRE_SETTING" />
+                <action android:name="dev.xdripyou.app.TASKER_COMMAND" />
             </intent-filter>
         </receiver>
 
