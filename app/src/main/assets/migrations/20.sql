@@ -1,1 +1,0 @@
-ALTER TABLE Calibration ADD COLUMN check_in BOOLEAN;
