@@ -114,7 +114,8 @@ fun OverviewScreen(
 
         // Hero Glucose Card
         item {
-            val isStale = latest?.isStaleAt(state.nowMs) ?: false
+            val staleLimitMs = settings.staleThresholdMinutes * 60_000L
+            val isStale = latest?.let { (state.nowMs - it.timestampMs) > staleLimitMs } ?: false
             val bgColor = if (latest == null) {
                 scheme.onSurfaceVariant
             } else if (isStale) {
@@ -262,15 +263,25 @@ fun OverviewScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
-                            val lastPred = state.predictions.lastOrNull()
-                            if (lastPred != null) {
-                                Text(
-                                    text = "Trend 30m: ~${GlucoseUnit.formatValue(lastPred.mgdl, settings.useMgdl)} ${GlucoseUnit.unitLabel(settings.useMgdl)}",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = scheme.tertiary,
-                                )
-                            } else {
-                                Spacer(Modifier.width(1.dp))
+                            Column {
+                                val lastPred = state.predictions.lastOrNull()
+                                if (lastPred != null) {
+                                    Text(
+                                        text = "Trend 30m: ~${GlucoseUnit.formatValue(lastPred.mgdl, settings.useMgdl)} ${GlucoseUnit.unitLabel(settings.useMgdl)}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = scheme.tertiary,
+                                    )
+                                }
+                                if (settings.sensorStartedAtMs > 0L) {
+                                    val ageHours = ((state.nowMs - settings.sensorStartedAtMs) / 3_600_000L).coerceAtLeast(0L)
+                                    val days = ageHours / 24L
+                                    val remHours = ageHours % 24L
+                                    Text(
+                                        text = "Sensor: ${days}T ${remHours}Std.",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = scheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                             FilledTonalButton(
                                 onClick = { showTreatmentSheet = true },
@@ -310,7 +321,7 @@ fun OverviewScreen(
                     Spacer(Modifier.height(14.dp))
                     GlucoseChart(
                         readings = state.readingsInWindow,
-                        treatments = state.treatmentsInWindow,
+                        treatments = if (settings.showChartTreatments) state.treatmentsInWindow else emptyList(),
                         predictions = state.predictions,
                         windowMs = state.chartWindow.durationMs,
                         nowMs = state.nowMs,

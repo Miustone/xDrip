@@ -66,8 +66,16 @@ class AlertEngine(
             } else {
                 ""
             }
-            title = "$formatted $unitLabel ${current.trend.symbol}$deltaSuffix"
-            body = if (minsAgo == 0L) "Gerade eben · ${current.source}" else "vor $minsAgo Min. · ${current.source}"
+            title = if (settings.compactOngoingNotification) {
+                "$formatted ${current.trend.symbol}$deltaSuffix"
+            } else {
+                "$formatted $unitLabel ${current.trend.symbol}$deltaSuffix"
+            }
+            body = if (settings.compactOngoingNotification) {
+                if (minsAgo == 0L) "jetzt" else "vor ${minsAgo}m"
+            } else {
+                if (minsAgo == 0L) "Gerade eben · ${current.source}" else "vor $minsAgo Min. · ${current.source}"
+            }
         }
 
         val launchIntent = PendingIntent.getActivity(
@@ -112,6 +120,13 @@ class AlertEngine(
         nm.cancel(NOTIF_ID_MISSED)
 
         if (settings.alertsDisabledUntilMs > now) {
+            stopAudioLocked()
+            return@withLock
+        }
+
+        if (settings.disableAlertsStaleData &&
+            (now - latest.timestampMs) > settings.disableAlertsStaleMinutes * 60_000L
+        ) {
             stopAudioLocked()
             return@withLock
         }
@@ -357,7 +372,8 @@ class AlertEngine(
             vibrate = rule.vibrate && effectiveProfile != AlertProfile.SILENT,
             volumeFrac = volumeFrac,
             defaultSnoozeMins = rule.defaultSnoozeMinutes,
-            soundUri = rule.soundUri,
+            soundUri = rule.soundUri ?: settings.defaultAlertSoundUri.takeIf { it.isNotBlank() },
+            noAlarmsDuringCalls = settings.noAlarmsDuringCalls,
         )
     }
 
@@ -463,6 +479,7 @@ class AlertEngine(
         volumeFrac: Float,
         defaultSnoozeMins: Int,
         soundUri: String? = null,
+        noAlarmsDuringCalls: Boolean = true,
     ) {
         val openIntent = PendingIntent.getActivity(
             context,
@@ -509,10 +526,16 @@ class AlertEngine(
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(NOTIF_ID_ALERT, builder.build())
 
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val inCall = audioManager.mode == AudioManager.MODE_IN_CALL ||
+            audioManager.mode == AudioManager.MODE_IN_COMMUNICATION
+        if (noAlarmsDuringCalls && inCall) {
+            return
+        }
+
         if (vibrate) {
             triggerVibration()
         }
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val isLoud = audioManager.ringerMode == AudioManager.RINGER_MODE_NORMAL
         if (volumeFrac > 0.0f && (overrideSilent || isLoud)) {
             playTone(volumeFrac = volumeFrac, overrideSilent = overrideSilent, customSoundUri = soundUri)

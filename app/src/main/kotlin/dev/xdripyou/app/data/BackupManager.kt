@@ -2,10 +2,13 @@ package dev.xdripyou.app.data
 
 import dev.xdripyou.app.domain.AlertRule
 import dev.xdripyou.app.domain.GlucoseReading
+import dev.xdripyou.app.domain.GlucoseUnit
 import dev.xdripyou.app.domain.TreatmentEntry
 import dev.xdripyou.app.domain.TrendArrow
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.Instant
+import java.util.Locale
 
 data class BackupPayload(
     val readings: List<GlucoseReading>,
@@ -129,5 +132,18 @@ object BackupManager {
             )
         }
         return BackupPayload(readings = readings, treatments = treatments, alertRules = rules)
+    }
+
+    fun encodeReadingsToCsv(readings: List<GlucoseReading>): String {
+        val sb = StringBuilder()
+        sb.appendLine("timestamp_iso,timestamp_ms,mgdl,mmol,trend,slope_mgdl_per_min,source")
+        for (r in readings.sortedByDescending { it.timestampMs }) {
+            val iso = Instant.ofEpochMilli(r.timestampMs).toString()
+            val mmol = String.format(Locale.US, "%.1f", r.mgdl * GlucoseUnit.MGDL_TO_MMOL)
+            val slope = String.format(Locale.US, "%.2f", r.slopePerMin)
+            val safeSource = r.source.replace(",", " ")
+            sb.appendLine("$iso,${r.timestampMs},${r.mgdl.toInt()},$mmol,${r.trend.wireName},$slope,$safeSource")
+        }
+        return sb.toString()
     }
 }

@@ -1,5 +1,6 @@
 package dev.xdripyou.app
 
+import dev.xdripyou.app.data.BackupManager
 import dev.xdripyou.app.domain.GlucoseReading
 import dev.xdripyou.app.domain.GlucoseStats
 import dev.xdripyou.app.domain.GlucoseUnit
@@ -43,5 +44,18 @@ class GlucoseStatsTest {
         assertEquals(25.0, stats.highPercent, 0.01)
         assertEquals(125.0, stats.meanMgdl, 0.01)
         assertEquals(3.31 + 0.02392 * 125.0, stats.gmiPercent, 0.01)
+    }
+
+    @Test
+    fun `encodes readings to csv sorted descending`() {
+        val readings = listOf(
+            GlucoseReading(timestampMs = 1_700_000_000_000L, mgdl = 100.0, slopePerMin = 0.5, trend = TrendArrow.FLAT, source = "CamAPS FX"),
+            GlucoseReading(timestampMs = 1_700_000_300_000L, mgdl = 118.0, slopePerMin = 1.2, trend = TrendArrow.FORTY_FIVE_UP, source = "CamAPS FX"),
+        )
+        val csv = BackupManager.encodeReadingsToCsv(readings)
+        val lines = csv.trim().lines()
+        assertEquals(3, lines.size)
+        assertEquals("timestamp_iso,timestamp_ms,mgdl,mmol,trend,slope_mgdl_per_min,source", lines[0])
+        assertEquals(true, lines[1].contains(",118,6.5,FortyFiveUp,1.20,CamAPS FX"))
     }
 }

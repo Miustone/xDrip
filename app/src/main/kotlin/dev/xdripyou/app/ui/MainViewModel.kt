@@ -228,6 +228,64 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setCompactOngoing(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.COMPACT_ONGOING] = enabled }
+            alertEngine.refreshOngoingNotification()
+        }
+    }
+
+    fun setStaleThresholdMinutes(minutes: Int) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.STALE_THRESHOLD_MINUTES] = minutes.coerceIn(6, 45) }
+        }
+    }
+
+    fun startSensorSession() {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.SENSOR_STARTED_AT_MS] = System.currentTimeMillis() }
+        }
+    }
+
+    fun stopSensorSession() {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.SENSOR_STARTED_AT_MS] = 0L }
+        }
+    }
+
+    fun setNoAlarmsDuringCalls(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.NO_ALARMS_DURING_CALLS] = enabled }
+        }
+    }
+
+    fun setDisableAlertsStaleData(enabled: Boolean, minutes: Int) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.DISABLE_ALERTS_STALE] = enabled
+                it[SettingsStore.Keys.DISABLE_ALERTS_STALE_MINUTES] = minutes.coerceIn(10, 60)
+            }
+        }
+    }
+
+    fun setDefaultAlertSoundUri(uri: String) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.DEFAULT_ALERT_SOUND_URI] = uri }
+        }
+    }
+
+    fun setShowChartTreatments(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.SHOW_CHART_TREATMENTS] = enabled }
+        }
+    }
+
+    fun setKeepScreenOn(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.KEEP_SCREEN_ON] = enabled }
+        }
+    }
+
     fun setAlertProfile(profile: AlertProfile) {
         viewModelScope.launch {
             settingsStore.update { it[SettingsStore.Keys.ALERT_PROFILE] = profile.wireValue }
@@ -448,6 +506,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     suspend fun exportBackupJson(): String = repo.exportBackupJson()
+
+    suspend fun exportReadingsCsv(): String = repo.exportReadingsCsv()
 
     fun importBackupJson(jsonText: String, onResult: (String) -> Unit) {
         viewModelScope.launch {

@@ -216,6 +216,11 @@ class GlucoseRepository(
         return BackupManager.encodeToJson(BackupPayload(readings, treatments, rules))
     }
 
+    suspend fun exportReadingsCsv(): String {
+        val readings = db.bgReadingDao().getLatest(5000).map { it.toDomain() }
+        return BackupManager.encodeReadingsToCsv(readings)
+    }
+
     suspend fun importBackupJson(jsonText: String): String {
         val payload = BackupManager.decodeFromJson(jsonText)
         var importedReadings = 0

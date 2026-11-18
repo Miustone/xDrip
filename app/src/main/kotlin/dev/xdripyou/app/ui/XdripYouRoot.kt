@@ -1,13 +1,16 @@
 package dev.xdripyou.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ShowChart
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.NotificationsActive
-import androidx.compose.material.icons.rounded.Sensors
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -18,6 +21,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -28,6 +32,7 @@ import dev.xdripyou.app.ui.screens.AlertsScreen
 import dev.xdripyou.app.ui.screens.HistoryScreen
 import dev.xdripyou.app.ui.screens.OverviewScreen
 import dev.xdripyou.app.ui.screens.SettingsScreen
+import dev.xdripyou.app.ui.screens.SettingsSection
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -39,14 +44,26 @@ fun XdripYouRoot(
     onRequestPostNotifications: () -> Unit,
     onRequestBatteryExemption: () -> Unit,
     onOpenDndPolicy: () -> Unit,
-    onExportBackup: () -> Unit,
-    onImportBackup: () -> Unit,
+    onPickAlertRingtone: () -> Unit,
+    onExportJson: () -> Unit,
+    onImportJson: () -> Unit,
+    onExportCsv: () -> Unit,
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    var settingsSection by rememberSaveable { mutableStateOf(SettingsSection.HUB) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    val titles = listOf("xDrip 2 You", "Alarme", "Verlauf", "Quelle & Setup")
+    BackHandler(enabled = selectedTab == 3 && settingsSection != SettingsSection.HUB) {
+        settingsSection = SettingsSection.HUB
+    }
+
+    val topTitle = when (selectedTab) {
+        0 -> "xDrip 2 You"
+        1 -> "Alarme"
+        2 -> "Verlauf"
+        else -> settingsSection.title
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -54,9 +71,16 @@ fun XdripYouRoot(
             TopAppBar(
                 title = {
                     Text(
-                        text = titles[selectedTab],
+                        text = topTitle,
                         fontWeight = FontWeight.Bold,
                     )
+                },
+                navigationIcon = {
+                    if (selectedTab == 3 && settingsSection != SettingsSection.HUB) {
+                        IconButton(onClick = { settingsSection = SettingsSection.HUB }) {
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Zurück")
+                        }
+                    }
                 },
             )
         },
@@ -82,9 +106,12 @@ fun XdripYouRoot(
                 )
                 NavigationBarItem(
                     selected = selectedTab == 3,
-                    onClick = { selectedTab = 3 },
-                    icon = { Icon(Icons.Rounded.Sensors, contentDescription = null) },
-                    label = { Text("Quelle") },
+                    onClick = {
+                        if (selectedTab == 3) settingsSection = SettingsSection.HUB
+                        selectedTab = 3
+                    },
+                    icon = { Icon(Icons.Rounded.Tune, contentDescription = null) },
+                    label = { Text("Optionen") },
                 )
             }
         },
@@ -101,7 +128,10 @@ fun XdripYouRoot(
                 onRequestPostNotifications = onRequestPostNotifications,
                 onRequestBatteryExemption = onRequestBatteryExemption,
                 onSeedDemo = viewModel::seedDemoCurve,
-                onOpenSettingsTab = { selectedTab = 3 },
+                onOpenSettingsTab = {
+                    settingsSection = SettingsSection.DIAGNOSTICS
+                    selectedTab = 3
+                },
                 modifier = mod,
             )
             1 -> AlertsScreen(
@@ -129,6 +159,8 @@ fun XdripYouRoot(
                 modifier = mod,
             )
             else -> SettingsScreen(
+                section = settingsSection,
+                onSelectSection = { settingsSection = it },
                 state = state,
                 onOpenNotificationListener = onOpenNotificationListener,
                 onRequestPostNotifications = onRequestPostNotifications,
@@ -136,9 +168,17 @@ fun XdripYouRoot(
                 onOpenDndPolicy = onOpenDndPolicy,
                 onSetCollectorEnabled = viewModel::setCollectorEnabled,
                 onSetForegroundService = viewModel::setForegroundService,
+                onSetCompactOngoing = viewModel::setCompactOngoing,
                 onSetSourceUnitMode = viewModel::setSourceUnitMode,
                 onSetJamProtection = viewModel::setJamProtection,
                 onSetCustomPackages = viewModel::setCustomPackages,
+                onSetStaleThresholdMinutes = viewModel::setStaleThresholdMinutes,
+                onStartSensorSession = viewModel::startSensorSession,
+                onStopSensorSession = viewModel::stopSensorSession,
+                onPickAlertRingtone = onPickAlertRingtone,
+                onResetAlertRingtone = { viewModel.setDefaultAlertSoundUri("") },
+                onSetNoAlarmsDuringCalls = viewModel::setNoAlarmsDuringCalls,
+                onSetDisableAlertsStale = viewModel::setDisableAlertsStaleData,
                 onSetNightscoutConfig = viewModel::setNightscoutConfig,
                 onSyncNightscoutNow = { cb ->
                     viewModel.syncNightscoutNow { msg ->
@@ -147,8 +187,9 @@ fun XdripYouRoot(
                     }
                 },
                 onSetLocalBroadcastEnabled = viewModel::setLocalBroadcastEnabled,
-                onExportBackup = onExportBackup,
-                onImportBackup = onImportBackup,
+                onExportJson = onExportJson,
+                onImportJson = onImportJson,
+                onExportCsv = onExportCsv,
                 onSimulateNotification = viewModel::simulateCamApsNotification,
                 onInjectManualReading = viewModel::injectManualReading,
                 onSeedDemo = viewModel::seedDemoCurve,
@@ -156,6 +197,8 @@ fun XdripYouRoot(
                 onSetUseMgdl = viewModel::setUseMgdl,
                 onSetTargetRange = viewModel::setTargetRange,
                 onSetPredictionCurve = viewModel::setPredictionCurveEnabled,
+                onSetShowChartTreatments = viewModel::setShowChartTreatments,
+                onSetKeepScreenOn = viewModel::setKeepScreenOn,
                 onSetDynamicColor = viewModel::setDynamicColor,
                 onSetThemeMode = viewModel::setThemeMode,
                 modifier = mod,
