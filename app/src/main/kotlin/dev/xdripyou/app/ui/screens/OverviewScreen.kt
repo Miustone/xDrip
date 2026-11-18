@@ -326,6 +326,22 @@ private fun HeroGlucoseCard(
                         }
                     }
                 }
+                val emptySteps = state.todaySteps
+                val emptyHr = state.latestHeartRateBpm
+                if ((settings.showStepsCounter && emptySteps > 0) || emptyHr != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        if (settings.showStepsCounter && emptySteps > 0) {
+                            SmallPill("Schritte $emptySteps", scheme.surfaceContainerHigh, scheme.onSurfaceVariant)
+                        }
+                        if (emptyHr != null) {
+                            SmallPill("♥ $emptyHr bpm", scheme.surfaceContainerHigh, scheme.error)
+                        }
+                    }
+                }
             } else {
                 val mins = latest.minutesAgoAt(state.nowMs)
                 val ageLabel = if (mins == 0L) "jetzt" else "vor ${mins}m"
@@ -389,6 +405,7 @@ private fun HeroGlucoseCard(
                 val pump = state.externalPumpStatus
                 val pumpFresh = pump != null && (state.nowMs - pump.timestampMs) <= 3_600_000L
                 val steps = state.todaySteps
+                val hrBpm = state.latestHeartRateBpm
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -405,6 +422,9 @@ private fun HeroGlucoseCard(
                     }
                     if (settings.showStepsCounter && steps > 0) {
                         SmallPill("Schritte $steps", scheme.surfaceContainerHigh, scheme.onSurfaceVariant)
+                    }
+                    if (hrBpm != null) {
+                        SmallPill("♥ $hrBpm bpm", scheme.surfaceContainerHigh, scheme.error)
                     }
                     if (pumpFresh && pump?.reservoirUnits != null) {
                         SmallPill("${pump.reservoirUnits.toInt()}E", scheme.surfaceContainerHigh, scheme.onSurfaceVariant)

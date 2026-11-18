@@ -133,6 +133,15 @@ class GlucoseForegroundService : Service() {
                     if (settings.tidepoolEnabled && settings.tidepoolEmail.isNotBlank() && settings.tidepoolPassword.isNotBlank() && tickCount % 15 == 0) {
                         app.repository.syncTidepool()
                     }
+                    if (settings.glookoEnabled && settings.glookoEmail.isNotBlank() && settings.glookoPassword.isNotBlank() && tickCount % 15 == 0) {
+                        val beforeLatest = app.repository.getLatestReadings(1).firstOrNull()?.timestampMs ?: 0L
+                        app.repository.syncGlooko(lookbackHours = 48)
+                        val afterLatest = app.repository.getLatestReadings(1).firstOrNull()
+                        if (afterLatest != null && afterLatest.timestampMs > beforeLatest) {
+                            app.alertEngine.refreshOngoingNotification()
+                            app.alertEngine.evaluateOnNewReading(afterLatest)
+                        }
+                    }
                 }
                 if (tickCount % 60 == 0) {
                     app.repository.pruneExpiredReadings()

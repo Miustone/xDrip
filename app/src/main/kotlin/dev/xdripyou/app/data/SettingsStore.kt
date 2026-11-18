@@ -32,6 +32,11 @@ class SettingsStore(context: Context) {
         store.edit(block)
     }
 
+    suspend fun hasExplicitHealthConnectToggle(): Boolean {
+        val prefs = store.data.first()
+        return prefs.contains(Keys.HC_ENABLED)
+    }
+
     suspend fun getCompanionLastState(): Pair<Long, Long> {
         val prefs = store.data.first()
         return (prefs[Keys.LAST_COMPANION_VAL] ?: -1L) to (prefs[Keys.LAST_COMPANION_REPEAT] ?: 0L)
@@ -164,7 +169,11 @@ class SettingsStore(context: Context) {
         nightscoutDeviceStatusEnabled = this[Keys.NS_DEVICE_STATUS] ?: true,
         healthConnectEnabled = this[Keys.HC_ENABLED] ?: false,
         healthConnectSend = this[Keys.HC_SEND] ?: true,
-        healthConnectReceive = this[Keys.HC_RECEIVE] ?: false,
+        healthConnectReceive = this[Keys.HC_RECEIVE] ?: true,
+        glookoEnabled = this[Keys.GLOOKO_ENABLED] ?: false,
+        glookoRegion = this[Keys.GLOOKO_REGION] ?: "eu_de",
+        glookoEmail = this[Keys.GLOOKO_EMAIL] ?: "",
+        glookoPassword = this[Keys.GLOOKO_PASS] ?: "",
         influxEnabled = this[Keys.INFLUX_ENABLED] ?: false,
         influxUrl = this[Keys.INFLUX_URL] ?: "",
         influxDatabase = this[Keys.INFLUX_DB] ?: "",
@@ -320,6 +329,10 @@ class SettingsStore(context: Context) {
         val HC_ENABLED = booleanPreferencesKey("hc_enabled")
         val HC_SEND = booleanPreferencesKey("hc_send")
         val HC_RECEIVE = booleanPreferencesKey("hc_receive")
+        val GLOOKO_ENABLED = booleanPreferencesKey("glooko_enabled")
+        val GLOOKO_REGION = stringPreferencesKey("glooko_region")
+        val GLOOKO_EMAIL = stringPreferencesKey("glooko_email")
+        val GLOOKO_PASS = stringPreferencesKey("glooko_pass")
         val INFLUX_ENABLED = booleanPreferencesKey("influx_enabled")
         val INFLUX_URL = stringPreferencesKey("influx_url")
         val INFLUX_DB = stringPreferencesKey("influx_db")

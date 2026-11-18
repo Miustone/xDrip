@@ -86,6 +86,7 @@ import androidx.compose.ui.unit.dp
 import dev.xdripyou.app.BuildConfig
 import dev.xdripyou.app.XdripYouApplication
 import dev.xdripyou.app.data.CareLinkRegion
+import dev.xdripyou.app.data.GlookoRegion
 import dev.xdripyou.app.data.LibreLinkRegion
 import dev.xdripyou.app.domain.BasalSchedule
 import dev.xdripyou.app.domain.CamApsParser
@@ -140,11 +141,13 @@ private val searchableOptionsIndex = listOf(
     SettingSearchItem(SettingsSection.SOURCES, "Freestyle Libre 1/2/3 & NFC FRAM", "NfcV FRAM Scan, Bubble/MiaoMiao Bridge, Libre 2 BLE & OOP2-Bridge", "libre nfc fram bubble miaomiao oop2 ble libre3"),
     SettingSearchItem(SettingsSection.SOURCES, "CamAPS FX & Companion-Apps", "Notification Listener, Paketauswahl & Jam-/Deduplizierungs-Schutz", "camaps companion notification listener paket jam deduplizierung"),
     SettingSearchItem(SettingsSection.SOURCES, "Cloud-Follower (Share, LibreLinkUp, CareLink, WebFollow)", "Direkter Cloud-Abruf von Dexcom, LibreView, Medtronic & JSON-URLs", "dexcom share librelinkup carelink medtronic webfollow follower"),
+    SettingSearchItem(SettingsSection.SOURCES, "Glooko (Insulin, Kohlenhydrate & alte Werte)", "Cloud-Sync (DE/FR/EU/US) oder Glooko ZIP/CSV Export direkt importieren", "glooko insulin bolus carbs kohlenhydrate zip csv export import verlauf alte werte"),
     SettingSearchItem(SettingsSection.SOURCES, "Sensor-Kalibrierung (WLS & Plugins)", "WLS, Letzte 7 OLS, Feste Steigung, MARD & Fingerstich-Kalibrierungen", "kalibrierung calibration wls ols slope intercept mard"),
     SettingSearchItem(SettingsSection.ALARMS, "Alarm-Ton, DND-Umgehung & Klingelton", "Lautlos-Umgehung, Klingeltonwahl, Anruf-Stummschaltung & Stale-Sperre", "klingelton sound dnd lautlos stumm anruf stale"),
     SettingSearchItem(SettingsSection.ALARMS, "Wegwischen-Schlummern & Eskalation", "Snooze-on-Dismiss, 3-Min-Verzögerung, Blitz & Bildschirm-Wecken", "snooze dismiss wischen blitz taschenlampe wake eskalation ansteigend"),
     SettingSearchItem(SettingsSection.ALARMS, "Sprachausgabe (TTS) & Wear-Broadcast", "Messwerte/Alarme vorlesen & ExternalStatus Broadcast für Smartwatches", "tts sprachausgabe vorlesen wear smartwatch externalstatus broadcast"),
-    SettingSearchItem(SettingsSection.CLOUD, "Nightscout, Health Connect, InfluxDB & Tidepool", "Upload/Pull für Entries, Treatments, DeviceStatus & bidirektionales Sync", "nightscout health connect influxdb tidepool upload sync"),
+    SettingSearchItem(SettingsSection.CLOUD, "Health Connect (Schritte, Puls, Sport, KH & BG)", "Bidirektionaler Sync für Glukose, Schritte, Herzfrequenz, Workouts & Ernährung", "health connect schritte steps puls heart rate training workout nutrition kohlenhydrate"),
+    SettingSearchItem(SettingsSection.CLOUD, "Nightscout, InfluxDB & Tidepool", "Upload/Pull für Entries, Treatments & DeviceStatus", "nightscout influxdb tidepool upload sync"),
     SettingSearchItem(SettingsSection.CLOUD, "xDrip Peer-Sync, Web-Service 17580 & Backup", "Master-Follower-Sync, lokaler HTTP-Server, Tasker, JSON/CSV-Backup & Aufbewahrung", "peer sync webservice 17580 sgv pebble tasker backup json csv export import"),
     SettingSearchItem(SettingsSection.DIAGNOSTICS, "Live-Protokoll, Simulator, Demo & Changelog", "Notification-Log, Testwerte einspeisen, Demo-Verlauf & App-Info", "diagnose log simulator demo test version changelog"),
 )
@@ -153,8 +156,8 @@ private val settingsCategories = listOf(
     SettingsCategoryMeta(
         section = SettingsSection.SOURCES,
         title = "Datenquellen & Sensor",
-        subtitle = "CamAPS FX, CareLink, WebFollow, Companion-Apps, Kalibrierung (WLS)",
-        keywords = "camaps dexcom libre carelink webfollow aidex companion broadcast empfang kalibrierung calibration wls slope intercept mard notification listener sensor start ablauf stale",
+        subtitle = "CamAPS FX, Glooko, CareLink, WebFollow, Dexcom/Libre BLE, WLS",
+        keywords = "camaps dexcom libre carelink glooko webfollow aidex companion broadcast empfang kalibrierung calibration wls slope intercept mard notification listener sensor start ablauf stale zip csv",
         icon = Icons.Rounded.Sensors,
     ),
     SettingsCategoryMeta(
@@ -250,6 +253,7 @@ fun SettingsScreen(
     onExportJson: () -> Unit,
     onImportJson: () -> Unit,
     onExportCsv: () -> Unit,
+    onImportGlookoFile: () -> Unit,
     onSimulateNotification: (String, (String) -> Unit) -> Unit,
     onInjectManualReading: (Double) -> Unit,
     onSeedDemo: () -> Unit,
@@ -295,6 +299,7 @@ fun SettingsScreen(
             onSyncDexcomShareNow = onSyncDexcomShareNow,
             onSetLibreLinkConfig = onSetLibreLinkConfig,
             onSyncLibreLinkNow = onSyncLibreLinkNow,
+            onImportGlookoFile = onImportGlookoFile,
             modifier = modifier,
         )
         SettingsSection.ALARMS -> SettingsAlarmsOptionsPage(
@@ -355,6 +360,7 @@ fun SettingsScreen(
             onExportJson = onExportJson,
             onImportJson = onImportJson,
             onExportCsv = onExportCsv,
+            onImportGlookoFile = onImportGlookoFile,
             modifier = modifier,
         )
         SettingsSection.DIAGNOSTICS -> SettingsDiagnosticsPage(
@@ -590,6 +596,7 @@ private fun SettingsSourcesPage(
     onSyncDexcomShareNow: ((String) -> Unit) -> Unit,
     onSetLibreLinkConfig: (Boolean, String, String, String) -> Unit,
     onSyncLibreLinkNow: ((String) -> Unit) -> Unit,
+    onImportGlookoFile: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -953,6 +960,89 @@ private fun SettingsSourcesPage(
                         ) { Text("Jetzt abrufen") }
                     }
                     wfFeedback?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = scheme.primary) }
+                }
+            }
+        }
+
+        // Glooko Cloud Follower + ZIP/CSV Export Importer
+        item {
+            var glEmailText by remember(settings.glookoEmail) { mutableStateOf(settings.glookoEmail) }
+            var glPassText by remember(settings.glookoPassword) { mutableStateOf(settings.glookoPassword) }
+            var glFeedback by remember { mutableStateOf<String?>(null) }
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("Glooko (CGM, Insulin, Kohlenhydrate & Verlauf)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Synchronisiert CGM-Werte, Insulin-Boli & KH aus der Glooko Cloud (alle 15 Min.) oder importiert direkt einen Export von my.glooko.com (.zip / .csv).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                    SwitchRow(
+                        "Glooko Cloud-Sync aktiv",
+                        "Ruft automatisch alle 15 Min. CGM, Insulin & KH ab",
+                        settings.glookoEnabled,
+                        { viewModel.setGlookoConfig(it, settings.glookoRegion, glEmailText, glPassText) },
+                    )
+                    Text("Server-Region", style = MaterialTheme.typography.labelLarge, color = scheme.onSurfaceVariant)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        GlookoRegion.entries.forEach { region ->
+                            FilterChip(
+                                selected = settings.glookoRegion == region.wireValue,
+                                onClick = {
+                                    viewModel.setGlookoConfig(settings.glookoEnabled, region.wireValue, glEmailText, glPassText)
+                                },
+                                label = { Text(region.labelDe) },
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = glEmailText,
+                        onValueChange = { glEmailText = it },
+                        label = { Text("Glooko E-Mail") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = glPassText,
+                        onValueChange = { glPassText = it },
+                        label = { Text("Glooko Passwort") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.setGlookoConfig(settings.glookoEnabled, settings.glookoRegion, glEmailText, glPassText)
+                                glFeedback = "Glooko-Daten gespeichert"
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Speichern") }
+                        Button(
+                            onClick = {
+                                viewModel.setGlookoConfig(settings.glookoEnabled, settings.glookoRegion, glEmailText, glPassText)
+                                viewModel.syncGlookoNow(lookbackHours = 48) { glFeedback = it }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("48h abrufen") }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.setGlookoConfig(settings.glookoEnabled, settings.glookoRegion, glEmailText, glPassText)
+                                viewModel.syncGlookoNow(lookbackHours = 24 * 30) { glFeedback = it }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("30 Tage laden") }
+                        OutlinedButton(
+                            onClick = onImportGlookoFile,
+                            modifier = Modifier.weight(1f),
+                        ) { Text("ZIP/CSV Import") }
+                    }
+                    glFeedback?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = scheme.primary) }
                 }
             }
         }
@@ -1907,6 +1997,7 @@ private fun SettingsCloudPage(
     onExportJson: () -> Unit,
     onImportJson: () -> Unit,
     onExportCsv: () -> Unit,
+    onImportGlookoFile: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -2095,7 +2186,7 @@ private fun SettingsCloudPage(
                     )
                     SwitchRow(
                         "Health Connect Sync aktiv",
-                        "Bidirektionaler Glukose- & Kohlenhydrate-Abgleich",
+                        "Synchronisiert Glukose, Schritte, Puls, Workouts & Kohlenhydrate (24h)",
                         settings.healthConnectEnabled,
                         { onSetHealthConnectConfig(it, settings.healthConnectSend, settings.healthConnectReceive) },
                     )
@@ -2103,7 +2194,7 @@ private fun SettingsCloudPage(
                         SwitchRow("Glukose & KH an Health Connect senden", null, settings.healthConnectSend) {
                             onSetHealthConnectConfig(true, it, settings.healthConnectReceive)
                         }
-                        SwitchRow("Glukose aus Health Connect empfangen", null, settings.healthConnectReceive) {
+                        SwitchRow("Schritte, Puls, Sport, KH & BG empfangen", null, settings.healthConnectReceive) {
                             onSetHealthConnectConfig(true, settings.healthConnectSend, it)
                         }
                         Button(
@@ -2330,6 +2421,11 @@ private fun SettingsCloudPage(
                         Spacer(Modifier.width(6.dp))
                         Text("Messwerte als CSV exportieren")
                     }
+                    OutlinedButton(onClick = onImportGlookoFile, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Rounded.Download, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Glooko Export (.zip / .csv) importieren")
+                    }
                 }
             }
         }
@@ -2499,6 +2595,8 @@ private fun SettingsDiagnosticsPage(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
+                    Text("[26.11.17-rc1] · Health Connect Aktivität & Glooko Sync/Import", fontWeight = FontWeight.Bold)
+                    Text("• Voller Health Connect Sync in die Übersicht: Schritte, Herzfrequenz (Puls-Kurve), Trainings, Kohlenhydrate & CGM-Werte\n• Glooko Cloud-Follower (DE/FR, EU, US, CA, UK, AU) + direkter Glooko ZIP/CSV-Import für historische Werte, Insulin & Kohlenhydrate")
                     Text("[26.11.4] · Einrichtungs-Assistent & volle xDrip-Optionen", fontWeight = FontWeight.Bold)
                     Text("• Geführter 4-Schritt-Einrichtungs-Assistent für den ersten Start inkl. aller Systemberechtigungen\n• Alle wichtigen xDrip-Optionen funktional integriert: Sprachausgabe (TTS), Kamerablitz-Puls, Ansteigend-Feinabstimmung, Alle Companion-Apps, Sensor-Ablauf-Erinnerung, Chart-Optionen (Punkte/Gitter/Ø-Linie/Y-Achse), 24h-Statuszeile & Datenvorhaltung")
                     Text("[26.11.3] · Options-Hub & Sensor-Tools", fontWeight = FontWeight.Bold)

@@ -66,12 +66,29 @@ data class MainUiState(
     val calibrations: List<CalibrationRecord> = emptyList(),
     val reminders: List<ReminderItem> = emptyList(),
     val activitySamples24h: List<ActivitySample> = emptyList(),
+    val historyReadings: List<GlucoseReading> = emptyList(),
+    val historyTreatments: List<TreatmentEntry> = emptyList(),
     val nowMs: Long = System.currentTimeMillis(),
 ) {
     val latestReading: GlucoseReading? get() = readings24h.firstOrNull()
 
     val todaySteps: Int
-        get() = activitySamples24h.sumOf { it.steps }
+        get() {
+            val cal = java.util.Calendar.getInstance().apply {
+                timeInMillis = nowMs
+                set(java.util.Calendar.HOUR_OF_DAY, 0)
+                set(java.util.Calendar.MINUTE, 0)
+                set(java.util.Calendar.SECOND, 0)
+                set(java.util.Calendar.MILLISECOND, 0)
+            }
+            val startOfToday = cal.timeInMillis
+            val today = activitySamples24h.filter { it.timestampMs >= startOfToday && it.steps > 0 }
+            val hc = today.filter { it.source == "Health Connect" }
+            return if (hc.isNotEmpty()) hc.sumOf { it.steps } else today.sumOf { it.steps }
+        }
+
+    val latestHeartRateBpm: Int?
+        get() = activitySamples24h.lastOrNull { it.heartRateBpm != null && it.heartRateBpm in 25..240 }?.heartRateBpm
 
     val slopeIntercept: SlopeIntercept
         get() = CalibrationEngine.calculateByAlgorithm(
@@ -156,9 +173,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val chartWindowFlow = MutableStateFlow(ChartWindow.SIX_HOURS)
     private val statsPeriodFlow = MutableStateFlow(StatsPeriod.DAY_1)
     private val extendedStatsFlow = MutableStateFlow(ExtendedGlucoseStats())
+    private val historyReadingsFlow = MutableStateFlow<List<GlucoseReading>>(emptyList())
+    private val historyTreatmentsFlow = MutableStateFlow<List<TreatmentEntry>>(emptyList())
     private val permissionsFlow = MutableStateFlow(SystemPermissionsHelper.getStatus(app))
     private val healthConnectGrantedFlow = MutableStateFlow(false)
     private val nowMsFlow = MutableStateFlow(System.currentTimeMillis())
+    private var initialHcSyncAttempted = false
 
     private val since24h = System.currentTimeMillis() - 24 * 3_600_000L
 
@@ -176,10 +196,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         repo.observeCollectorEvents(limit = 50),
         chartWindowFlow,
         statsPeriodFlow,
-        extendedStatsFlow,
+        combine(extendedStatsFlow, historyReadingsFlow, historyTreatmentsFlow) { ext, hr, ht ->
+            Triple(ext, hr, ht)
+        },
         permissionsFlow,
-    ) { events, window, statsPeriod, extStats, perms ->
-        MetaBundle(events, window, statsPeriod, extStats, perms)
+    ) { events, window, statsPeriod, statsTriple, perms ->
+        MetaBundle(
+            events = events,
+            window = window,
+            statsPeriod = statsPeriod,
+            extendedStats = statsTriple.first,
+            historyReadings = statsTriple.second,
+            historyTreatments = statsTriple.third,
+            perms = perms,
+        )
     }
 
     private val syncAndStatusFlow = combine(
@@ -216,6 +246,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             calibrations = extra.calibrations,
             reminders = extra.reminders,
             activitySamples24h = extra.activitySamples,
+            historyReadings = meta.historyReadings,
+            historyTreatments = meta.historyTreatments,
             nowMs = nowMs,
         )
     }.stateIn(
@@ -248,16 +280,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         val now = System.currentTimeMillis()
         val since = now - period.days * 86_400_000L
-        val computed = withContext(Dispatchers.Default) {
+        val (computed, histReadings, histTreatments) = withContext(Dispatchers.Default) {
             val readings = repo.getReadingsSince(since, limit = (period.days * 320).coerceAtLeast(600))
-            AgpStatsCalculator.computeExtendedStats(
+            val treatments = repo.getTreatmentsSince(since, limit = (period.days * 60).coerceAtLeast(300))
+            val stats = AgpStatsCalculator.computeExtendedStats(
                 readings = readings,
                 period = period,
                 targetLowMgdl = targetLowMgdl,
                 targetHighMgdl = targetHighMgdl,
             )
+            Triple(stats, readings, treatments)
         }
         extendedStatsFlow.value = computed
+        historyReadingsFlow.value = histReadings
+        historyTreatmentsFlow.value = histTreatments
     }
 
     fun selectStatsPeriod(period: StatsPeriod) {
@@ -268,7 +304,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         permissionsFlow.value = SystemPermissionsHelper.getStatus(app)
         nowMsFlow.value = System.currentTimeMillis()
         viewModelScope.launch {
-            healthConnectGrantedFlow.value = runCatching { HealthConnectSyncManager.hasAllPermissions(app) }.getOrDefault(false)
+            val anyReadGranted = runCatching { HealthConnectSyncManager.hasAnyReadPermission(app) }.getOrDefault(false)
+            healthConnectGrantedFlow.value = anyReadGranted
+            if (anyReadGranted && !initialHcSyncAttempted) {
+                initialHcSyncAttempted = true
+                if (!settingsStore.hasExplicitHealthConnectToggle()) {
+                    settingsStore.update {
+                        it[SettingsStore.Keys.HC_ENABLED] = true
+                        it[SettingsStore.Keys.HC_RECEIVE] = true
+                    }
+                }
+                if (settingsStore.current().healthConnectEnabled) {
+                    repo.syncHealthConnect(app)
+                    nowMsFlow.value = System.currentTimeMillis()
+                }
+            }
+        }
+    }
+
+    fun onHealthConnectPermissionsResult() {
+        viewModelScope.launch {
+            val anyReadGranted = runCatching { HealthConnectSyncManager.hasAnyReadPermission(app) }.getOrDefault(false)
+            healthConnectGrantedFlow.value = anyReadGranted
+            if (anyReadGranted) {
+                settingsStore.update {
+                    it[SettingsStore.Keys.HC_ENABLED] = true
+                    it[SettingsStore.Keys.HC_RECEIVE] = true
+                }
+                repo.syncHealthConnect(app, forcePull = true)
+                nowMsFlow.value = System.currentTimeMillis()
+                alertEngine.refreshOngoingNotification()
+            }
         }
     }
 
@@ -441,10 +507,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun syncHealthConnectNow(onResult: (String) -> Unit) {
         viewModelScope.launch {
-            val res = repo.syncHealthConnect(app)
+            val res = repo.syncHealthConnect(app, forcePull = true)
             nowMsFlow.value = System.currentTimeMillis()
             alertEngine.refreshOngoingNotification()
             onResult(res.getOrElse { "Fehler: ${it.message}" })
+        }
+    }
+
+    fun setGlookoConfig(enabled: Boolean, region: String, email: String, password: String) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.GLOOKO_ENABLED] = enabled
+                it[SettingsStore.Keys.GLOOKO_REGION] = region
+                it[SettingsStore.Keys.GLOOKO_EMAIL] = email.trim()
+                it[SettingsStore.Keys.GLOOKO_PASS] = password
+            }
+        }
+    }
+
+    fun syncGlookoNow(lookbackHours: Int = 48, onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val res = repo.syncGlooko(lookbackHours = lookbackHours)
+            nowMsFlow.value = System.currentTimeMillis()
+            alertEngine.refreshOngoingNotification()
+            onResult(res.getOrElse { "Glooko Fehler: ${it.message}" })
+        }
+    }
+
+    fun importGlookoExport(bytes: ByteArray, fileName: String?, onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val res = withContext(Dispatchers.IO) {
+                repo.importGlookoExport(bytes, fileName)
+            }
+            nowMsFlow.value = System.currentTimeMillis()
+            alertEngine.refreshOngoingNotification()
+            onResult(res.getOrElse { "Glooko Import Fehler: ${it.message}" })
         }
     }
 
@@ -1274,6 +1371,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val window: ChartWindow,
         val statsPeriod: StatsPeriod,
         val extendedStats: ExtendedGlucoseStats,
+        val historyReadings: List<GlucoseReading>,
+        val historyTreatments: List<TreatmentEntry>,
         val perms: PermissionStatus,
     )
 }

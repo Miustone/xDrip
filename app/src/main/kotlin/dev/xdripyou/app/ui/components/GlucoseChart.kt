@@ -189,8 +189,11 @@ fun GlucoseChart(
                     LegendDot(glucoseColors.inRange, "Ziel")
                     LegendDot(glucoseColors.low, "Niedrig")
                     LegendDot(glucoseColors.high, "Hoch")
-                    if (showStepsInChart && activitySamples.isNotEmpty()) {
-                        LegendDot(scheme.tertiary.copy(alpha = 0.7f), "Aktivität")
+                    if (showStepsInChart && activitySamples.any { it.steps > 0 }) {
+                        LegendDot(scheme.tertiary.copy(alpha = 0.7f), "Schritte")
+                    }
+                    if (showStepsInChart && activitySamples.any { it.heartRateBpm != null }) {
+                        LegendDot(scheme.error.copy(alpha = 0.7f), "Puls")
                     }
                 }
                 Text(
@@ -406,7 +409,7 @@ fun GlucoseChart(
                     )
                 }
 
-                // 4c. Activity / Steps bars along bottom (Schritte, globally scaled to prevent scroll jitter)
+                // 4c. Activity / Steps bars & Heart Rate curve along bottom (globally scaled to prevent scroll jitter)
                 if (showStepsInChart && activitySamples.isNotEmpty()) {
                     val visibleSteps = activitySamples.filter {
                         it.timestampMs in (startMs - 1_800_000L)..(endMs + 1_800_000L) && it.steps > 0
@@ -422,6 +425,33 @@ fun GlucoseChart(
                                 color = scheme.tertiary.copy(alpha = 0.24f),
                                 topLeft = Offset(sx - barW / 2f, chartBottom - barH),
                                 size = androidx.compose.ui.geometry.Size(barW, barH),
+                            )
+                        }
+                    }
+
+                    val visibleHr = activitySamples.filter {
+                        it.timestampMs in (startMs - 1_800_000L)..(endMs + 1_800_000L) && it.heartRateBpm != null
+                    }
+                    if (visibleHr.isNotEmpty()) {
+                        val hrBandH = chartH * 0.16f
+                        val hrPath = Path()
+                        visibleHr.forEachIndexed { idx, s ->
+                            val bpm = (s.heartRateBpm ?: 70).coerceIn(40, 190)
+                            val frac = (bpm - 40f) / 150f
+                            val hx = xForMs(s.timestampMs)
+                            val hy = chartBottom - (frac * hrBandH)
+                            if (idx == 0) hrPath.moveTo(hx, hy) else hrPath.lineTo(hx, hy)
+                            drawCircle(
+                                color = scheme.error.copy(alpha = 0.65f),
+                                radius = 4f,
+                                center = Offset(hx, hy),
+                            )
+                        }
+                        if (visibleHr.size >= 2) {
+                            drawPath(
+                                path = hrPath,
+                                color = scheme.error.copy(alpha = 0.45f),
+                                style = Stroke(width = 2f, cap = StrokeCap.Round),
                             )
                         }
                     }
@@ -535,6 +565,16 @@ fun GlucoseChart(
                         val by = yForMgdl(bgMgdl)
                         drawCircle(color = glucoseColors.low, radius = 9.5f, center = Offset(tx, by))
                         drawCircle(color = scheme.surface, radius = 5f, center = Offset(tx, by))
+                    }
+                    if (t.eventType == "Exercise" && !t.hasInsulin && !t.hasCarbs) {
+                        drawCircle(color = glucoseColors.inRange, radius = 7.5f, center = Offset(tx, markerY))
+                        treatLabelPaint.color = glucoseColors.inRange.toArgb()
+                        drawContext.canvas.nativeCanvas.drawText(
+                            "Sport",
+                            tx,
+                            markerY - 12f,
+                            treatLabelPaint,
+                        )
                     }
                 }
 

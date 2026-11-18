@@ -84,6 +84,28 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+    private val importGlookoLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@registerForActivityResult
+            lifecycleScope.launch {
+                val pair = withContext(Dispatchers.IO) {
+                    val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    val name = queryDisplayName(uri)
+                    bytes to name
+                }
+                val bytes = pair.first ?: return@launch
+                viewModel.importGlookoExport(bytes, pair.second) { msg ->
+                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+
+    private fun queryDisplayName(uri: Uri): String? = runCatching {
+        contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        }
+    }.getOrNull() ?: uri.lastPathSegment
+
     private val ringtonePickerLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
@@ -94,7 +116,7 @@ class MainActivity : ComponentActivity() {
 
     private val healthConnectPermissionLauncher =
         registerForActivityResult(PermissionController.createRequestPermissionResultContract()) {
-            viewModel.refreshPermissions()
+            viewModel.onHealthConnectPermissionsResult()
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -173,6 +195,11 @@ class MainActivity : ComponentActivity() {
                     },
                     onExportCsv = {
                         exportCsvLauncher.launch("xdrip2you-werte.csv")
+                    },
+                    onImportGlookoFile = {
+                        importGlookoLauncher.launch(
+                            arrayOf("application/zip", "application/x-zip-compressed", "text/csv", "text/comma-separated-values", "*/*")
+                        )
                     },
                 )
             }

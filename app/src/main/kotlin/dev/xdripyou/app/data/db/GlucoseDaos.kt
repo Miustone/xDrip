@@ -36,13 +36,13 @@ interface BgReadingDao {
 @Dao
 interface TreatmentDao {
     @Query("SELECT * FROM treatments WHERE timestampMs >= :sinceMs ORDER BY timestampMs DESC LIMIT :limit")
-    fun observeSince(sinceMs: Long, limit: Int = 300): Flow<List<TreatmentEntity>>
+    fun observeSince(sinceMs: Long, limit: Int = 1000): Flow<List<TreatmentEntity>>
 
     @Query("SELECT * FROM treatments WHERE timestampMs >= :sinceMs ORDER BY timestampMs DESC LIMIT :limit")
-    suspend fun getSince(sinceMs: Long, limit: Int = 500): List<TreatmentEntity>
+    suspend fun getSince(sinceMs: Long, limit: Int = 5000): List<TreatmentEntity>
 
     @Query("SELECT * FROM treatments ORDER BY timestampMs DESC LIMIT :limit")
-    suspend fun getLatest(limit: Int = 300): List<TreatmentEntity>
+    suspend fun getLatest(limit: Int = 500): List<TreatmentEntity>
 
     @Query("SELECT * FROM treatments WHERE syncedNightscout = 0 ORDER BY timestampMs ASC LIMIT :limit")
     suspend fun getUnsynced(limit: Int = 50): List<TreatmentEntity>
@@ -151,6 +151,9 @@ interface ActivitySampleDao {
 
     @Query("SELECT * FROM activity_samples WHERE timestampMs >= :sinceMs ORDER BY timestampMs ASC")
     suspend fun getSince(sinceMs: Long): List<ActivitySampleEntity>
+
+    @Query("SELECT * FROM activity_samples WHERE timestampMs = :timestampMs LIMIT 1")
+    suspend fun getAt(timestampMs: Long): ActivitySampleEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: ActivitySampleEntity): Long

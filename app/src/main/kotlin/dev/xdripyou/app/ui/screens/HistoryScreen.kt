@@ -88,9 +88,19 @@ fun HistoryScreen(
     val settings = state.settings
     val extStats = state.extendedStats
     val stats = extStats.stats
-    val readings = state.readings24h
-    val treatments = state.treatments24h
-    val timeFmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val readings = if (state.historyReadings.isNotEmpty() || state.statsPeriod != StatsPeriod.DAY_1) {
+        state.historyReadings
+    } else {
+        state.readings24h
+    }
+    val treatments = if (state.historyTreatments.isNotEmpty() || state.statsPeriod != StatsPeriod.DAY_1) {
+        state.historyTreatments
+    } else {
+        state.treatments24h
+    }
+    val timeFmt = remember(state.statsPeriod) {
+        SimpleDateFormat(if (state.statsPeriod == StatsPeriod.DAY_1) "HH:mm" else "dd.MM. HH:mm", Locale.getDefault())
+    }
 
     var filterIndex by remember { mutableIntStateOf(0) } // 0 = Alle, 1 = Glukose, 2 = Einträge
     var showTreatmentSheet by remember { mutableStateOf(false) }
@@ -222,7 +232,7 @@ fun HistoryScreen(
                                 val totalInsulin = treatments.sumOf { it.insulinUnits }
                                 val totalCarbs = treatments.sumOf { it.carbsGrams }
                                 Text(
-                                    "24h Therapie: ${String.format(Locale.US, "%.1f", totalInsulin)} IE · ${totalCarbs.toInt()} g KH · ${treatments.size} Einträge",
+                                    "${state.statsPeriod.label} Therapie: ${String.format(Locale.US, "%.1f", totalInsulin)} IE · ${totalCarbs.toInt()} g KH · ${treatments.size} Einträge",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = scheme.primary,
                                 )

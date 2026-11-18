@@ -319,26 +319,31 @@ class GlucoseRepository(
         return Result.success("LibreLinkUp OK (↓ $pulled neue Werte)")
     }
 
-    suspend fun syncHealthConnect(context: android.content.Context): Result<String> {
+    suspend fun syncHealthConnect(context: android.content.Context, forcePull: Boolean = false): Result<String> {
         val settings = settingsStore.current()
-        if (!settings.healthConnectEnabled) return Result.success("Health Connect deaktiviert")
+        if (!forcePull && !settings.healthConnectEnabled) return Result.success("Health Connect deaktiviert")
         var sent = 0
-        var received = 0
+        var receivedReadings = 0
+        var receivedCarbs = 0
+        var receivedWorkouts = 0
+        var receivedStepsHours = 0
+        var receivedHrHours = 0
 
-        if (settings.healthConnectSend) {
+        if (settings.healthConnectSend && settings.healthConnectEnabled) {
             val recentReadings = getReadingsSince(System.currentTimeMillis() - 12 * 3_600_000L, 200)
             val sendRes = HealthConnectSyncManager.writeReadings(context, recentReadings)
-            if (sendRes.isFailure) return Result.failure(sendRes.exceptionOrNull()!!)
-            sent = sendRes.getOrDefault(0)
+            if (sendRes.isSuccess) sent = sendRes.getOrDefault(0)
 
             val recentTreatments = getTreatmentsSince(System.currentTimeMillis() - 12 * 3_600_000L, 100)
             HealthConnectSyncManager.writeCarbTreatments(context, recentTreatments)
         }
 
-        if (settings.healthConnectReceive) {
-            val readRes = HealthConnectSyncManager.readRecentReadings(context, hoursBack = 12L)
-            if (readRes.isFailure) return Result.failure(readRes.exceptionOrNull()!!)
-            for ((ts, mgdl) in readRes.getOrThrow().sortedBy { it.first }) {
+        if (forcePull || settings.healthConnectReceive) {
+            val pullRes = HealthConnectSyncManager.pullAllRecent(context, hoursBack = 24L)
+            if (pullRes.isFailure) return Result.failure(pullRes.exceptionOrNull()!!)
+            val pull = pullRes.getOrThrow()
+
+            for ((ts, mgdl) in pull.readings.sortedBy { it.first }) {
                 val out = insertReading(
                     mgdl = mgdl,
                     timestampMs = ts,
@@ -346,10 +351,126 @@ class GlucoseRepository(
                     rawText = null,
                     applyDeduplication = false,
                 )
-                if (out is InsertOutcome.Inserted) received++
+                if (out is InsertOutcome.Inserted) receivedReadings++
+            }
+
+            val incomingTreatments = pull.nutritionTreatments + pull.workoutTreatments
+            if (incomingTreatments.isNotEmpty()) {
+                val inserted = insertUniqueTreatments(incomingTreatments)
+                receivedCarbs = incomingTreatments.count { it.carbsGrams > 0.0 }.coerceAtMost(inserted)
+                receivedWorkouts = inserted - receivedCarbs
+            }
+
+            for ((hourTs, steps) in pull.hourlySteps) {
+                recordActivitySample(
+                    timestampMs = hourTs,
+                    steps = steps,
+                    source = "Health Connect",
+                    replaceStepsIfLarger = true,
+                )
+                receivedStepsHours++
+            }
+            for ((hourTs, bpm) in pull.hourlyHeartRateBpm) {
+                recordActivitySample(
+                    timestampMs = hourTs,
+                    steps = 0,
+                    heartRateBpm = bpm,
+                    source = "Health Connect",
+                    replaceStepsIfLarger = true,
+                )
+                receivedHrHours++
             }
         }
-        return Result.success("Health Connect OK (↑ $sent, ↓ $received)")
+        return Result.success(
+            "Health Connect OK · ↑ $sent Werte · ↓ $receivedReadings BG, $receivedStepsHours Std. Schritte, $receivedHrHours Std. Puls" +
+                if (receivedCarbs > 0 || receivedWorkouts > 0) ", ${receivedCarbs + receivedWorkouts} Aktivitäten/KH" else ""
+        )
+    }
+
+    suspend fun syncGlooko(lookbackHours: Int = 48): Result<String> {
+        val settings = settingsStore.current()
+        if (settings.glookoEmail.isBlank() || settings.glookoPassword.isBlank()) {
+            return Result.failure(IllegalStateException("Glooko E-Mail oder Passwort fehlt"))
+        }
+        val region = GlookoRegion.fromWire(settings.glookoRegion)
+        val res = GlookoClient.fetchData(
+            region = region,
+            email = settings.glookoEmail,
+            password = settings.glookoPassword,
+            lookbackHours = lookbackHours,
+        )
+        if (res.isFailure) return Result.failure(res.exceptionOrNull()!!)
+        val payload = res.getOrThrow()
+        var insertedReadings = 0
+        for (r in payload.readings) {
+            val out = insertReading(
+                mgdl = r.mgdl,
+                timestampMs = r.timestampMs,
+                source = r.source,
+                rawText = null,
+                applyDeduplication = false,
+                overrideTrend = r.trend,
+            )
+            if (out is InsertOutcome.Inserted) insertedReadings++
+        }
+        val insertedTreatments = insertUniqueTreatments(payload.treatments)
+        return Result.success(
+            "Glooko OK · ↓ $insertedReadings neue Werte (${payload.readings.size} gelesen), $insertedTreatments Insulin/KH-Einträge"
+        )
+    }
+
+    suspend fun importGlookoExport(bytes: ByteArray, fileName: String? = null): Result<String> {
+        val parsed = dev.xdripyou.app.domain.GlookoExportImporter.parseBytes(bytes, fileName)
+        if (parsed.isFailure) return Result.failure(parsed.exceptionOrNull()!!)
+        val res = parsed.getOrThrow()
+        var insertedReadings = 0
+        for (r in res.readings) {
+            val out = insertReading(
+                mgdl = r.mgdl,
+                timestampMs = r.timestampMs,
+                source = r.source,
+                rawText = null,
+                applyDeduplication = false,
+            )
+            if (out is InsertOutcome.Inserted) insertedReadings++
+        }
+        val insertedTreatments = insertUniqueTreatments(res.treatments)
+        val basalMsg = if (res.basalHourlyRates != null && settingsStore.current().basalScheduleWire.isBlank()) {
+            settingsStore.update {
+                it[SettingsStore.Keys.BASAL_SCHEDULE_WIRE] =
+                    dev.xdripyou.app.domain.BasalSchedule(res.basalHourlyRates).encodeWire()
+                it[SettingsStore.Keys.SHOW_BASAL_RATE] = true
+            }
+            " + Basalprofil"
+        } else ""
+        return Result.success(
+            "Glooko Export OK (${res.processedFiles} Dateien) · $insertedReadings Werte, $insertedTreatments Insulin/KH/BZ-Einträge$basalMsg"
+        )
+    }
+
+    private suspend fun insertUniqueTreatments(incoming: List<TreatmentEntry>): Int {
+        if (incoming.isEmpty()) return 0
+        val minTs = incoming.minOf { it.timestampMs } - 120_000L
+        val existing = db.treatmentDao().getSince(minTs, limit = 5000).map { it.toDomain() }
+        val known = existing.toMutableList()
+        var added = 0
+        for (t in incoming) {
+            val dup = known.any { local ->
+                kotlin.math.abs(local.timestampMs - t.timestampMs) <= 60_000L &&
+                    kotlin.math.abs(local.insulinUnits - t.insulinUnits) < 0.05 &&
+                    kotlin.math.abs(local.carbsGrams - t.carbsGrams) < 0.5 &&
+                    local.eventType == t.eventType &&
+                    (local.bloodGlucoseMgdl == null && t.bloodGlucoseMgdl == null ||
+                        local.bloodGlucoseMgdl != null && t.bloodGlucoseMgdl != null &&
+                        kotlin.math.abs(local.bloodGlucoseMgdl - t.bloodGlucoseMgdl) < 2.0)
+            }
+            if (!dup) {
+                db.treatmentDao().upsert(TreatmentEntity.fromDomain(t))
+                known += t
+                added++
+            }
+        }
+        return added
     }
 
     suspend fun syncInfluxDb(): Result<String> {
@@ -528,16 +649,26 @@ class GlucoseRepository(
         steps: Int,
         heartRateBpm: Int? = null,
         source: String = "Sensor",
+        replaceStepsIfLarger: Boolean = false,
     ) {
         if (steps <= 0 && heartRateBpm == null) return
+        val existing = db.activitySampleDao().getAt(timestampMs)
+        val mergedSteps = if (existing == null) {
+            steps.coerceAtLeast(0)
+        } else if (replaceStepsIfLarger) {
+            maxOf(existing.steps, steps.coerceAtLeast(0))
+        } else {
+            existing.steps + steps.coerceAtLeast(0)
+        }
+        val mergedHr = heartRateBpm ?: existing?.heartRateBpm
+        val mergedSource = if (source == "Health Connect") "Health Connect" else (existing?.source ?: source)
         db.activitySampleDao().upsert(
-            ActivitySampleEntity.fromDomain(
-                ActivitySample(
-                    timestampMs = timestampMs,
-                    steps = steps.coerceAtLeast(0),
-                    heartRateBpm = heartRateBpm,
-                    source = source,
-                )
+            ActivitySampleEntity(
+                id = existing?.id ?: 0L,
+                timestampMs = timestampMs,
+                steps = mergedSteps,
+                heartRateBpm = mergedHr,
+                source = mergedSource,
             )
         )
     }

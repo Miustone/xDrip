@@ -74,6 +74,7 @@ fun XdripYouRoot(
     onExportJson: () -> Unit,
     onImportJson: () -> Unit,
     onExportCsv: () -> Unit,
+    onImportGlookoFile: () -> Unit,
 ) {
     if (!state.isLoaded) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -315,6 +316,7 @@ fun XdripYouRoot(
                 onExportJson = onExportJson,
                 onImportJson = onImportJson,
                 onExportCsv = onExportCsv,
+                onImportGlookoFile = onImportGlookoFile,
                 onSimulateNotification = viewModel::simulateCamApsNotification,
                 onInjectManualReading = viewModel::injectManualReading,
                 onSeedDemo = viewModel::seedDemoCurve,

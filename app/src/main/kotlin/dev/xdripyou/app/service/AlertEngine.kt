@@ -690,6 +690,7 @@ class AlertEngine(
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(false)
             .setContentIntent(openIntent)
 
@@ -710,10 +711,6 @@ class AlertEngine(
             builder
                 .addAction(0, "Schlummern (${defaultSnoozeMins}m)", snoozeIntent)
                 .addAction(0, "Stopp", stopIntent)
-        }
-
-        if (overrideSilent) {
-            builder.setFullScreenIntent(openIntent, true)
         }
 
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
