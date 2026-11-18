@@ -20,7 +20,9 @@ import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import dev.xdripyou.app.data.HealthConnectSyncManager
+import dev.xdripyou.app.service.FloatingOverlayService
 import dev.xdripyou.app.service.GlucoseForegroundService
+import dev.xdripyou.app.service.NfcLibreReader
 import dev.xdripyou.app.service.SystemPermissionsHelper
 import dev.xdripyou.app.ui.MainViewModel
 import dev.xdripyou.app.ui.XdripYouRoot
@@ -99,6 +101,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         startForegroundIfEnabled()
+        handleNfcIntentIfPresent(intent)
 
         setContent {
             val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -108,6 +111,14 @@ class MainActivity : ComponentActivity() {
                     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 } else {
                     window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+            }
+
+            LaunchedEffect(state.settings.floatingOverlayEnabled) {
+                if (state.settings.floatingOverlayEnabled) {
+                    FloatingOverlayService.start(this@MainActivity)
+                } else {
+                    FloatingOverlayService.stop(this@MainActivity)
                 }
             }
 
@@ -168,10 +179,25 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleNfcIntentIfPresent(intent)
+    }
+
     override fun onResume() {
         super.onResume()
         viewModel.refreshPermissions()
         startForegroundIfEnabled()
+    }
+
+    private fun handleNfcIntentIfPresent(intent: Intent?) {
+        val app = application as XdripYouApplication
+        lifecycleScope.launch {
+            val res = NfcLibreReader.handleTagIntent(app, intent) ?: return@launch
+            val msg = res.getOrElse { "NFC Fehler: ${it.message}" }
+            Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun startForegroundIfEnabled() {

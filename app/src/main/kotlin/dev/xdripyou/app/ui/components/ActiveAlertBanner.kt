@@ -37,6 +37,7 @@ fun ActiveAlertBanner(
     nowMs: Long,
     onSnooze: (Int) -> Unit,
     onStop: () -> Unit,
+    onOpenCustomSnooze: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -84,6 +85,9 @@ fun ActiveAlertBanner(
                 FilledTonalButton(onClick = { onSnooze(15) }) { Text("15m") }
                 FilledTonalButton(onClick = { onSnooze(30) }) { Text("30m") }
                 FilledTonalButton(onClick = { onSnooze(60) }) { Text("60m") }
+                if (onOpenCustomSnooze != null) {
+                    FilledTonalButton(onClick = onOpenCustomSnooze) { Text("···") }
+                }
                 Spacer(Modifier.weight(1f))
                 if (alert.isSnoozed) {
                     OutlinedButton(onClick = onStop) { Text("Aufheben") }

@@ -19,6 +19,13 @@ class AlertActionReceiver : BroadcastReceiver() {
                         val mins = intent.getIntExtra(EXTRA_SNOOZE_MINUTES, 20)
                         app.alertEngine.snoozeActiveAlert(mins)
                     }
+                    ACTION_SNOOZE_ON_DISMISS -> {
+                        val mins = intent.getIntExtra(EXTRA_SNOOZE_MINUTES, 20)
+                        val settings = app.repository.settingsStore.current()
+                        if (settings.snoozeOnDismissEnabled) {
+                            app.alertEngine.snoozeActiveAlert(mins)
+                        }
+                    }
                     ACTION_STOP -> {
                         app.alertEngine.stopAlert(clearActive = true)
                     }
@@ -31,6 +38,7 @@ class AlertActionReceiver : BroadcastReceiver() {
 
     companion object {
         const val ACTION_SNOOZE = "dev.xdripyou.app.ACTION_SNOOZE"
+        const val ACTION_SNOOZE_ON_DISMISS = "dev.xdripyou.app.ACTION_SNOOZE_ON_DISMISS"
         const val ACTION_STOP = "dev.xdripyou.app.ACTION_STOP"
         const val EXTRA_SNOOZE_MINUTES = "snooze_minutes"
     }

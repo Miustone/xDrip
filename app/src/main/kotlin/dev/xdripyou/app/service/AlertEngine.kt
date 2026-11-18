@@ -140,6 +140,16 @@ class AlertEngine(
                 targetPackage = settings.broadcastTargetPackage,
             )
         }
+        if (settings.watchStatusBroadcastEnabled) {
+            val iobCob = repository.currentIobCob(now)
+            XdripBroadcastReceiver.sendWearExternalStatus(
+                context = context,
+                reading = latest,
+                iobUnits = iobCob.iobUnits,
+                cobGrams = iobCob.cobGrams,
+                useMgdl = settings.useMgdl,
+            )
+        }
 
         if (settings.speakReadingsEnabled) {
             speechHelper.speakReading(
@@ -282,6 +292,33 @@ class AlertEngine(
                 postSensorExpiryNotification((remainingMs / 3_600_000L).toInt())
             }
         }
+
+        val reminders = repository.getReminders()
+        for (reminder in reminders) {
+            if (!reminder.enabled) continue
+            if (now >= reminder.nextDueMs && now - reminder.lastTriggeredMs >= 10 * 60_000L) {
+                postReminderNotification(reminder.title, reminder.intervalHours)
+                val nextDue = now + reminder.intervalHours.coerceIn(1, 2400) * 3_600_000L
+                repository.upsertReminder(
+                    reminder.copy(
+                        lastTriggeredMs = now,
+                        nextDueMs = nextDue,
+                    )
+                )
+            }
+        }
+    }
+
+    private fun postReminderNotification(title: String, intervalHours: Int) {
+        val notif = NotificationCompat.Builder(context, NotificationChannels.MISSED_ALERTS)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("Erinnerung: $title")
+            .setContentText("Fällig (Intervall: alle ${intervalHours} Std.)")
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .build()
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify(NOTIF_ID_REMINDER_BASE + (title.hashCode() and 0x7F), notif)
     }
 
     private fun postSensorExpiryNotification(hoursRemaining: Int) {
@@ -500,6 +537,7 @@ class AlertEngine(
             soundUri = rule.soundUri ?: settings.defaultAlertSoundUri.takeIf { it.isNotBlank() },
             noAlarmsDuringCalls = settings.noAlarmsDuringCalls,
             showButtons = settings.showButtonsInAlerts,
+            snoozeOnDismissMins = if (settings.snoozeOnDismissEnabled) settings.snoozeOnDismissMinutes else null,
         )
     }
 
@@ -610,6 +648,7 @@ class AlertEngine(
         soundUri: String? = null,
         noAlarmsDuringCalls: Boolean = true,
         showButtons: Boolean = true,
+        snoozeOnDismissMins: Int? = null,
     ) {
         val openIntent = PendingIntent.getActivity(
             context,
@@ -646,6 +685,19 @@ class AlertEngine(
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setAutoCancel(false)
             .setContentIntent(openIntent)
+
+        if (snoozeOnDismissMins != null) {
+            val dismissIntent = PendingIntent.getBroadcast(
+                context,
+                13,
+                Intent(context, AlertActionReceiver::class.java).apply {
+                    action = AlertActionReceiver.ACTION_SNOOZE_ON_DISMISS
+                    putExtra(AlertActionReceiver.EXTRA_SNOOZE_MINUTES, snoozeOnDismissMins)
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            builder.setDeleteIntent(dismissIntent)
+        }
 
         if (showButtons) {
             builder
@@ -817,6 +869,7 @@ class AlertEngine(
         const val NOTIF_ID_ALERT = 1002
         const val NOTIF_ID_MISSED = 1003
         const val NOTIF_ID_SENSOR_EXPIRY = 1004
+        const val NOTIF_ID_REMINDER_BASE = 1100
         private const val URGENT_LOW_UUID = "c5f1999c-4ec5-449e-adad-3980b172b920"
     }
 }

@@ -110,3 +110,36 @@ interface CollectorEventDao {
     @Query("DELETE FROM collector_events")
     suspend fun deleteAll()
 }
+
+@Dao
+interface CalibrationDao {
+    @Query("SELECT * FROM calibrations ORDER BY timestampMs DESC LIMIT :limit")
+    fun observeRecent(limit: Int = 100): Flow<List<CalibrationEntity>>
+
+    @Query("SELECT * FROM calibrations ORDER BY timestampMs DESC LIMIT :limit")
+    suspend fun getRecent(limit: Int = 50): List<CalibrationEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: CalibrationEntity): Long
+
+    @Query("DELETE FROM calibrations WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM calibrations")
+    suspend fun deleteAll()
+}
+
+@Dao
+interface ReminderDao {
+    @Query("SELECT * FROM reminders ORDER BY nextDueMs ASC")
+    fun observeAll(): Flow<List<ReminderEntity>>
+
+    @Query("SELECT * FROM reminders ORDER BY nextDueMs ASC")
+    suspend fun getAll(): List<ReminderEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: ReminderEntity): Long
+
+    @Query("DELETE FROM reminders WHERE id = :id")
+    suspend fun deleteById(id: Long)
+}

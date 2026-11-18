@@ -2,6 +2,24 @@ package dev.xdripyou.app.domain
 
 import kotlin.math.max
 
+enum class InsulinPreset(
+    val wireValue: String,
+    val labelDe: String,
+    val onsetMinutes: Int,
+    val peakMinutes: Int,
+    val durationMinutes: Int,
+) {
+    ULTRA_RAPID_FIASP("fiasp", "Ultra-Schnell (Fiasp)", onsetMinutes = 10, peakMinutes = 45, durationMinutes = 240),
+    ULTRA_RAPID_LYUMJEV("lyumjev", "Ultra-Schnell (Lyumjev)", onsetMinutes = 8, peakMinutes = 40, durationMinutes = 220),
+    RAPID_NOVORAPID("novorapid", "Schnell (NovoRapid / Humalog)", onsetMinutes = 15, peakMinutes = 65, durationMinutes = 270),
+    CUSTOM("custom", "Benutzerdefiniert", onsetMinutes = 15, peakMinutes = 65, durationMinutes = 270);
+
+    companion object {
+        fun fromWire(value: String?): InsulinPreset =
+            entries.firstOrNull { it.wireValue == value } ?: RAPID_NOVORAPID
+    }
+}
+
 data class IobCobSnapshot(
     val iobUnits: Double = 0.0,
     val cobGrams: Double = 0.0,
@@ -99,12 +117,17 @@ object IobCobCalculator {
         settings: AppSettings,
     ): IobCobSnapshot {
         if (!settings.showIobCob) return IobCobSnapshot()
+        val preset = InsulinPreset.fromWire(settings.insulinPreset)
+        val onset = if (preset == InsulinPreset.CUSTOM) 15 else preset.onsetMinutes
+        val peak = if (preset == InsulinPreset.CUSTOM) settings.insulinPeakMinutes else preset.peakMinutes
+        val duration = if (preset == InsulinPreset.CUSTOM) settings.insulinDurationMinutes else preset.durationMinutes
         return IobCobSnapshot(
             iobUnits = calculateIob(
                 treatments = treatments,
                 atMs = atMs,
-                durationMinutes = settings.insulinDurationMinutes,
-                peakMinutes = settings.insulinPeakMinutes,
+                durationMinutes = duration,
+                peakMinutes = peak,
+                onsetMinutes = onset,
             ),
             cobGrams = calculateCob(
                 treatments = treatments,

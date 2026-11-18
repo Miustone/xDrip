@@ -2,7 +2,7 @@
 
 Modernisierte, aufgeräumte Neuimplementierung von xDrip in **100 % Kotlin + Jetpack Compose + Material 3 You**, aufbauend auf diesem Fork von `NightscoutFoundation/xDrip` (unveränderter Upstream-Stand liegt auf Branch `master`, aktive Entwicklung läuft auf `main` bzw. `kotlin-jetpack-you`).
 
-Aktuelle Version: **`26.11.9`** (`YY.MM.AppVersion`, Details in [CHANGELOG.md](CHANGELOG.md)).
+Aktuelle Version: **`26.11.11`** (`YY.MM.AppVersion`, Details in [CHANGELOG.md](CHANGELOG.md)).
 
 ## Enthaltene Features
 - **Ersteinrichtungs-Assistent (First-Run Setup Wizard)**:
@@ -28,4 +28,7 @@ Aktuelle Version: **`26.11.9`** (`YY.MM.AppVersion`, Details in [CHANGELOG.md](C
   - **Health Connect, InfluxDB & Tidepool**: Bidirektionaler Android Health Connect Sync (Blutzucker & KH), InfluxDB v1/v2 Line-Protocol-Uploader sowie Tidepool-Uploader.
   - **Lokaler xDrip-Broadcast, Broadcast-Snooze & Tasker-Bridge**: Sendet/empfängt `BgEstimate`, `Snooze` sowie Tasker-/Locale-Automationsbefehle.
   - **Lokaler xDrip Web-Service (Port 17580)**: Stellt `/sgv.json`, `/status.json`, `/treatments.json`, `/pebble` und `/tasker/<befehl>` lokal bereit.
-  - **Material You Homescreen-Widget** (`xDrip 2 You · Blutzucker`), **JSON-Backup (Export/Import)**, **CSV-Export** und automatische Datenbereinigung nach Aufbewahrungsdauer.
+  - **Material You Homescreen-Widget** (`xDrip 2 You · Blutzucker`), **Schwebendes Overlay**, **Wear ExternalStatus-Broadcast**, **JSON-Backup (Export/Import)**, **CSV-Export**, **AAPS-Profil-Import** und **Erinnerungen**.
+- **Direkt-Hardware, Kalibrierung & weitere Follower**:
+  - **BLE & NFC**: Direkter BLE-Scanner & GATT-Kollektor für Bluetooth-Blutzuckermessgeräte (`0x1808`), Libre-Bridges (Bubble/MiaoMiao) und Dexcom G6/ONE sowie **Freestyle Libre NFC FRAM-Scan (`NfcV`)**.
+  - **Kalibrierungs-Engine & Rauschfilter**: Gewichtete lineare Regression (`CalibrationEngine`, Slope/Intercept/MARD %), 5-Punkt-Glättung, **CareLink Connect** und generischer **WebFollow JSON-Client**.

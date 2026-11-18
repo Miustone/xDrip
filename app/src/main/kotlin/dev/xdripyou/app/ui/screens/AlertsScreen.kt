@@ -19,10 +19,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.EventRepeat
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
@@ -30,13 +34,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -47,9 +54,11 @@ import androidx.compose.ui.unit.dp
 import dev.xdripyou.app.domain.AlertProfile
 import dev.xdripyou.app.domain.AlertRule
 import dev.xdripyou.app.domain.GlucoseUnit
+import dev.xdripyou.app.domain.ReminderItem
 import dev.xdripyou.app.ui.MainUiState
 import dev.xdripyou.app.ui.components.ActiveAlertBanner
 import dev.xdripyou.app.ui.components.AlertEditorSheet
+import dev.xdripyou.app.ui.components.SnoozePickerSheet
 import dev.xdripyou.app.ui.theme.LocalGlucoseColors
 import kotlin.math.roundToInt
 
@@ -72,6 +81,8 @@ fun AlertsScreen(
     onSetLowPrediction: (Boolean, Double, Int) -> Unit,
     onSetHighPrediction: (Boolean, Double, Int) -> Unit,
     onSetPersistentHigh: (Boolean, Double, Int) -> Unit,
+    onUpsertReminder: (ReminderItem) -> Unit = {},
+    onDeleteReminder: (Long) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -80,6 +91,8 @@ fun AlertsScreen(
 
     var editingRule by remember { mutableStateOf<AlertRule?>(null) }
     var showCreateSheet by remember { mutableStateOf(false) }
+    var showSnoozeSheet by remember { mutableStateOf(false) }
+    var showAddReminder by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier,
@@ -104,6 +117,7 @@ fun AlertsScreen(
                         nowMs = state.nowMs,
                         onSnooze = onSnoozeActive,
                         onStop = onStopActive,
+                        onOpenCustomSnooze = { showSnoozeSheet = true },
                     )
                 }
             }
@@ -513,7 +527,131 @@ fun AlertsScreen(
                     }
                 }
             }
+
+            // Reminders (Sensor, Katheter, Medikation)
+            item {
+                Card(shape = RoundedCornerShape(24.dp)) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Rounded.EventRepeat, null, tint = scheme.primary)
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "Erinnerungen",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            OutlinedButton(onClick = { showAddReminder = true }) {
+                                Icon(Icons.Rounded.Add, null, Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Neu")
+                            }
+                        }
+                        if (state.reminders.isEmpty()) {
+                            Text(
+                                "Keine aktiven Erinnerungen (z. B. Katheterwechsel alle 72h, Sensor alle 10T).",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = scheme.onSurfaceVariant,
+                            )
+                        } else {
+                            state.reminders.forEach { r ->
+                                val remHours = ((r.nextDueMs - state.nowMs) / 3_600_000L).coerceAtLeast(0L)
+                                Surface(
+                                    color = scheme.surfaceContainerHigh,
+                                    shape = RoundedCornerShape(16.dp),
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(r.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                            Text(
+                                                "Alle ${r.intervalHours}h · Fällig in ca. ${remHours}h",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = scheme.onSurfaceVariant,
+                                            )
+                                        }
+                                        Switch(
+                                            checked = r.enabled,
+                                            onCheckedChange = { onUpsertReminder(r.copy(enabled = it)) },
+                                        )
+                                        IconButton(onClick = { onDeleteReminder(r.id) }) {
+                                            Icon(Icons.Rounded.Delete, contentDescription = "Löschen")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    if (showSnoozeSheet) {
+        SnoozePickerSheet(
+            onDismiss = { showSnoozeSheet = false },
+            onSnoozeActive = onSnoozeActive,
+            onSilenceScope = onSilenceScope,
+        )
+    }
+
+    if (showAddReminder) {
+        var remTitle by remember { mutableStateOf("Katheterwechsel") }
+        var remHours by remember { mutableIntStateOf(72) }
+        AlertDialog(
+            onDismissRequest = { showAddReminder = false },
+            title = { Text("Neue Erinnerung") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = remTitle,
+                        onValueChange = { remTitle = it },
+                        label = { Text("Bezeichnung") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text("Intervall: $remHours Stunden", style = MaterialTheme.typography.bodySmall)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf(24, 48, 72, 168, 240, 336).forEach { hrs ->
+                            FilterChip(
+                                selected = remHours == hrs,
+                                onClick = { remHours = hrs },
+                                label = { Text(if (hrs >= 24 && hrs % 24 == 0) "${hrs / 24}T" else "${hrs}h") },
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val now = System.currentTimeMillis()
+                    onUpsertReminder(
+                        ReminderItem(
+                            title = remTitle.trim().ifEmpty { "Erinnerung" },
+                            intervalHours = remHours,
+                            nextDueMs = now + remHours * 3_600_000L,
+                            enabled = true,
+                        )
+                    )
+                    showAddReminder = false
+                }) { Text("Speichern") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddReminder = false }) { Text("Abbrechen") }
+            },
+        )
     }
 
     if (showCreateSheet || editingRule != null) {

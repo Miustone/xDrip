@@ -180,6 +180,24 @@ class SettingsStore(context: Context) {
         peerSyncSecret = this[Keys.PEER_SYNC_SECRET] ?: "",
         dynamicColorEnabled = this[Keys.DYNAMIC_COLOR] ?: true,
         themeMode = ThemeModeOption.fromWire(this[Keys.THEME_MODE]),
+        insulinPreset = this[Keys.INSULIN_PRESET] ?: "novorapid",
+        snoozeOnDismissEnabled = this[Keys.SNOOZE_ON_DISMISS_ENABLED] ?: false,
+        snoozeOnDismissMinutes = this[Keys.SNOOZE_ON_DISMISS_MINUTES] ?: 20,
+        watchStatusBroadcastEnabled = this[Keys.WATCH_STATUS_BROADCAST] ?: false,
+        floatingOverlayEnabled = this[Keys.FLOATING_OVERLAY] ?: false,
+        smoothChartNoise = this[Keys.SMOOTH_CHART_NOISE] ?: false,
+        showChartIobCurve = this[Keys.SHOW_CHART_IOB_CURVE] ?: true,
+        careLinkEnabled = this[Keys.CARELINK_ENABLED] ?: false,
+        careLinkRegion = this[Keys.CARELINK_REGION] ?: "eu",
+        careLinkUsername = this[Keys.CARELINK_USER] ?: "",
+        careLinkPassword = this[Keys.CARELINK_PASS] ?: "",
+        webFollowEnabled = this[Keys.WEB_FOLLOW_ENABLED] ?: false,
+        webFollowUrl = this[Keys.WEB_FOLLOW_URL] ?: "",
+        webFollowJsonPath = this[Keys.WEB_FOLLOW_JSON_PATH] ?: "sgv",
+        bleDeviceType = this[Keys.BLE_DEVICE_TYPE] ?: "none",
+        bleDeviceAddress = this[Keys.BLE_DEVICE_ADDRESS] ?: "",
+        bleDeviceName = this[Keys.BLE_DEVICE_NAME] ?: "",
+        nfcLibreEnabled = this[Keys.NFC_LIBRE_ENABLED] ?: true,
     )
 
     data class AlertCooldowns(
@@ -302,6 +320,24 @@ class SettingsStore(context: Context) {
         val PEER_SYNC_SECRET = stringPreferencesKey("peer_sync_secret")
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val THEME_MODE = stringPreferencesKey("theme_mode")
+        val INSULIN_PRESET = stringPreferencesKey("insulin_preset")
+        val SNOOZE_ON_DISMISS_ENABLED = booleanPreferencesKey("snooze_on_dismiss_enabled")
+        val SNOOZE_ON_DISMISS_MINUTES = intPreferencesKey("snooze_on_dismiss_minutes")
+        val WATCH_STATUS_BROADCAST = booleanPreferencesKey("watch_status_broadcast")
+        val FLOATING_OVERLAY = booleanPreferencesKey("floating_overlay")
+        val SMOOTH_CHART_NOISE = booleanPreferencesKey("smooth_chart_noise")
+        val SHOW_CHART_IOB_CURVE = booleanPreferencesKey("show_chart_iob_curve")
+        val CARELINK_ENABLED = booleanPreferencesKey("carelink_enabled")
+        val CARELINK_REGION = stringPreferencesKey("carelink_region")
+        val CARELINK_USER = stringPreferencesKey("carelink_user")
+        val CARELINK_PASS = stringPreferencesKey("carelink_pass")
+        val WEB_FOLLOW_ENABLED = booleanPreferencesKey("web_follow_enabled")
+        val WEB_FOLLOW_URL = stringPreferencesKey("web_follow_url")
+        val WEB_FOLLOW_JSON_PATH = stringPreferencesKey("web_follow_json_path")
+        val BLE_DEVICE_TYPE = stringPreferencesKey("ble_device_type")
+        val BLE_DEVICE_ADDRESS = stringPreferencesKey("ble_device_address")
+        val BLE_DEVICE_NAME = stringPreferencesKey("ble_device_name")
+        val NFC_LIBRE_ENABLED = booleanPreferencesKey("nfc_libre_enabled")
 
         val LAST_COMPANION_VAL = longPreferencesKey("last_companion_val")
         val LAST_COMPANION_REPEAT = longPreferencesKey("last_companion_repeat")

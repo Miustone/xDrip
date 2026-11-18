@@ -17,8 +17,10 @@ import kotlinx.coroutines.launch
         AlertRuleEntity::class,
         ActiveAlertEntity::class,
         CollectorEventEntity::class,
+        CalibrationEntity::class,
+        ReminderEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -27,6 +29,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun alertRuleDao(): AlertRuleDao
     abstract fun activeAlertDao(): ActiveAlertDao
     abstract fun collectorEventDao(): CollectorEventDao
+    abstract fun calibrationDao(): CalibrationDao
+    abstract fun reminderDao(): ReminderDao
 
     companion object {
         @Volatile
@@ -53,6 +57,41 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS calibrations (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        timestampMs INTEGER NOT NULL,
+                        bgMgdl REAL NOT NULL,
+                        rawValue REAL NOT NULL,
+                        slope REAL NOT NULL,
+                        intercept REAL NOT NULL,
+                        sensorId TEXT NOT NULL,
+                        slopeConfidence REAL NOT NULL,
+                        sensorConfidence REAL NOT NULL,
+                        note TEXT NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_calibrations_timestampMs ON calibrations(timestampMs)")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS reminders (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        title TEXT NOT NULL,
+                        intervalHours INTEGER NOT NULL,
+                        nextDueMs INTEGER NOT NULL,
+                        enabled INTEGER NOT NULL,
+                        snoozedMinutes INTEGER NOT NULL,
+                        lastTriggeredMs INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun get(context: Context): AppDatabase {
             return instance ?: synchronized(this) {
                 instance ?: buildDatabase(context.applicationContext).also { instance = it }
@@ -62,7 +101,7 @@ abstract class AppDatabase : RoomDatabase() {
         private fun buildDatabase(context: Context): AppDatabase {
             lateinit var db: AppDatabase
             db = Room.databaseBuilder(context, AppDatabase::class.java, "xdrip_you.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .addCallback(object : Callback() {
                     override fun onCreate(sqliteDb: SupportSQLiteDatabase) {
                         super.onCreate(sqliteDb)

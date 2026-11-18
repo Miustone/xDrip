@@ -1,5 +1,12 @@
 package dev.xdripyou.app.ui.screens
 
+import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -61,6 +68,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -70,18 +78,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.xdripyou.app.BuildConfig
+import dev.xdripyou.app.XdripYouApplication
+import dev.xdripyou.app.data.CareLinkRegion
 import dev.xdripyou.app.data.LibreLinkRegion
 import dev.xdripyou.app.domain.BasalSchedule
 import dev.xdripyou.app.domain.CamApsParser
 import dev.xdripyou.app.domain.GlucoseUnit
+import dev.xdripyou.app.domain.InsulinPreset
 import dev.xdripyou.app.domain.SourceUnitMode
 import dev.xdripyou.app.domain.ThemeModeOption
+import dev.xdripyou.app.service.BleCollectorManager
 import dev.xdripyou.app.ui.MainUiState
+import dev.xdripyou.app.ui.MainViewModel
 import dev.xdripyou.app.ui.theme.LocalGlucoseColors
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -109,22 +123,22 @@ private val settingsCategories = listOf(
     SettingsCategoryMeta(
         section = SettingsSection.SOURCES,
         title = "Datenquellen & Sensor",
-        subtitle = "CamAPS FX, Companion-Apps, Broadcast-Empfang, Sensor-Ablauf",
-        keywords = "camaps dexcom libre guardian aidex companion broadcast empfang notification listener benutzerrechte sensor start ablauf veraltet stale jam paket",
+        subtitle = "CamAPS FX, CareLink, WebFollow, Companion-Apps, Kalibrierung (WLS)",
+        keywords = "camaps dexcom libre carelink webfollow aidex companion broadcast empfang kalibrierung calibration wls slope intercept mard notification listener sensor start ablauf stale",
         icon = Icons.Rounded.Sensors,
     ),
     SettingsCategoryMeta(
         section = SettingsSection.ALARMS,
         title = "Alarme, Ton & Sprachausgabe",
-        subtitle = "Klingelton, Broadcast-Snooze, Ansteigend-Optionen, Blitz, TTS",
-        keywords = "alarm ton klingelton ringtone sprachausgabe tts vorlesen broadcast snooze anruf telefonat stumm dnd stale veraltet vibration blitz taschenlampe wake",
+        subtitle = "Klingelton, Snooze-on-Dismiss, Wear-Status, Ansteigend-Optionen, TTS",
+        keywords = "alarm ton klingelton ringtone sprachausgabe tts vorlesen broadcast snooze dismiss wischen wear smartwatch anruf telefonat stumm dnd stale blitz taschenlampe",
         icon = Icons.Rounded.NotificationsActive,
     ),
     SettingsCategoryMeta(
         section = SettingsSection.DISPLAY,
         title = "Anzeige, IOB/COB & Material 3 You",
-        subtitle = "Einheit, Zielbereich, IOB/COB-Wirkung, Chart-Stil, Nachttisch-Modus",
-        keywords = "mgdl mmol einheit zielbereich iob cob insulin kohlenhydrate dia chart punkte gitter durchschnitt y-achse vorhersage treatment statuszeile dynamic color material you theme hell dunkel bildschirm wach",
+        subtitle = "Einheit, Insulin-Presets (Fiasp/Lyumjev), AAPS JSON-Import, Chart-Glättung",
+        keywords = "mgdl mmol einheit zielbereich iob cob insulin fiasp lyumjev novorapid aaps profil basal glättung noise smoothing dia chart iob kurve vorhersage dynamic color theme",
         icon = Icons.Rounded.Palette,
     ),
     SettingsCategoryMeta(
@@ -148,6 +162,7 @@ fun SettingsScreen(
     section: SettingsSection,
     onSelectSection: (SettingsSection) -> Unit,
     state: MainUiState,
+    viewModel: MainViewModel,
     onReopenOnboarding: () -> Unit,
     onOpenNotificationListener: () -> Unit,
     onRequestPostNotifications: () -> Unit,
@@ -229,6 +244,7 @@ fun SettingsScreen(
         )
         SettingsSection.SOURCES -> SettingsSourcesPage(
             state = state,
+            viewModel = viewModel,
             onOpenNotificationListener = onOpenNotificationListener,
             onRequestPostNotifications = onRequestPostNotifications,
             onRequestBatteryExemption = onRequestBatteryExemption,
@@ -253,6 +269,7 @@ fun SettingsScreen(
         )
         SettingsSection.ALARMS -> SettingsAlarmsOptionsPage(
             state = state,
+            viewModel = viewModel,
             onOpenDndPolicy = onOpenDndPolicy,
             onPickAlertRingtone = onPickAlertRingtone,
             onResetAlertRingtone = onResetAlertRingtone,
@@ -270,6 +287,7 @@ fun SettingsScreen(
         )
         SettingsSection.DISPLAY -> SettingsDisplayPage(
             state = state,
+            viewModel = viewModel,
             onSetUseMgdl = onSetUseMgdl,
             onSetTargetRange = onSetTargetRange,
             onSetPredictionCurve = onSetPredictionCurve,
@@ -286,6 +304,7 @@ fun SettingsScreen(
         )
         SettingsSection.CLOUD -> SettingsCloudPage(
             state = state,
+            viewModel = viewModel,
             onSetNightscoutConfig = onSetNightscoutConfig,
             onSetNightscoutExtraConfig = onSetNightscoutExtraConfig,
             onSetNightscoutDeviceStatusEnabled = onSetNightscoutDeviceStatusEnabled,
@@ -468,6 +487,7 @@ private fun SettingsHubPage(
 @Composable
 private fun SettingsSourcesPage(
     state: MainUiState,
+    viewModel: MainViewModel,
     onOpenNotificationListener: () -> Unit,
     onRequestPostNotifications: () -> Unit,
     onRequestBatteryExemption: () -> Unit,
@@ -740,12 +760,335 @@ private fun SettingsSourcesPage(
                 }
             }
         }
+
+        // CareLink Connect Follower
+        item {
+            var clUserText by remember(settings.careLinkUsername) { mutableStateOf(settings.careLinkUsername) }
+            var clPassText by remember(settings.careLinkPassword) { mutableStateOf(settings.careLinkPassword) }
+            var clFeedback by remember { mutableStateOf<String?>(null) }
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("Medtronic CareLink Connect Follower", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    SwitchRow(
+                        "CareLink Follower aktiv",
+                        "Ruft Werte alle 5 Min. aus CareLink Connect ab",
+                        settings.careLinkEnabled,
+                        { viewModel.setCareLinkConfig(it, settings.careLinkRegion, clUserText, clPassText) },
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CareLinkRegion.entries.forEach { region ->
+                            FilterChip(
+                                selected = settings.careLinkRegion == region.wireValue,
+                                onClick = { viewModel.setCareLinkConfig(settings.careLinkEnabled, region.wireValue, clUserText, clPassText) },
+                                label = { Text(region.labelDe) },
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = clUserText,
+                        onValueChange = { clUserText = it },
+                        label = { Text("CareLink Benutzername") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = clPassText,
+                        onValueChange = { clPassText = it },
+                        label = { Text("CareLink Passwort") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.setCareLinkConfig(settings.careLinkEnabled, settings.careLinkRegion, clUserText, clPassText)
+                                clFeedback = "Gespeichert"
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Speichern") }
+                        Button(
+                            onClick = {
+                                viewModel.setCareLinkConfig(settings.careLinkEnabled, settings.careLinkRegion, clUserText, clPassText)
+                                viewModel.syncCareLinkNow { clFeedback = it }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Jetzt abrufen") }
+                    }
+                    clFeedback?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = scheme.primary) }
+                }
+            }
+        }
+
+        // Generic JSON WebFollow
+        item {
+            var wfUrlText by remember(settings.webFollowUrl) { mutableStateOf(settings.webFollowUrl) }
+            var wfPathText by remember(settings.webFollowJsonPath) { mutableStateOf(settings.webFollowJsonPath) }
+            var wfFeedback by remember { mutableStateOf<String?>(null) }
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("WebFollow (Generischer JSON-Endpoint)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    SwitchRow(
+                        "WebFollow aktiv",
+                        "Pollt alle 5 Min. eine beliebige JSON- oder Text-URL",
+                        settings.webFollowEnabled,
+                        { viewModel.setWebFollowConfig(it, wfUrlText, wfPathText) },
+                    )
+                    OutlinedTextField(
+                        value = wfUrlText,
+                        onValueChange = { wfUrlText = it },
+                        label = { Text("URL (z. B. https://.../api/v1/entries.json)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = wfPathText,
+                        onValueChange = { wfPathText = it },
+                        label = { Text("JSON-Feldname (z. B. sgv, bg, value)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.setWebFollowConfig(settings.webFollowEnabled, wfUrlText, wfPathText)
+                                wfFeedback = "Gespeichert"
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Speichern") }
+                        Button(
+                            onClick = {
+                                viewModel.setWebFollowConfig(settings.webFollowEnabled, wfUrlText, wfPathText)
+                                viewModel.syncWebFollowNow { wfFeedback = it }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Jetzt abrufen") }
+                    }
+                    wfFeedback?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = scheme.primary) }
+                }
+            }
+        }
+
+        // WLS Sensor Calibration Engine
+        item {
+            var calBgText by remember { mutableStateOf("") }
+            var calRawText by remember { mutableStateOf("") }
+            var calFeedback by remember { mutableStateOf<String?>(null) }
+            val si = state.slopeIntercept
+            val calTimeFmt = remember { SimpleDateFormat("dd.MM. HH:mm", Locale.getDefault()) }
+
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("Sensor-Kalibrierung (WLS Linear)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Aktuell (${si.calibrationCount} Punkte): Slope ${String.format(Locale.US, "%.3f", si.slope)} · Intercept ${String.format(Locale.US, "%.1f", si.intercept)}" +
+                            (si.mardPercent?.let { " · MARD ${String.format(Locale.US, "%.1f%%", it)}" } ?: ""),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = scheme.primary,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = calBgText,
+                            onValueChange = { calBgText = it },
+                            label = { Text("Blutzucker (${GlucoseUnit.unitLabel(settings.useMgdl)})") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            value = calRawText,
+                            onValueChange = { calRawText = it },
+                            label = { Text("Rohwert (opt.)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                val entered = calBgText.replace(',', '.').toDoubleOrNull()
+                                val mgdl = if (entered != null) {
+                                    if (settings.useMgdl) entered else entered * GlucoseUnit.MMOL_TO_MGDL
+                                } else null
+                                val rawVal = calRawText.replace(',', '.').toDoubleOrNull()
+                                if (mgdl != null && mgdl in 20.0..600.0) {
+                                    viewModel.addCalibration(mgdl, rawVal, "Kalibrierung") { newSi ->
+                                        calFeedback = "Gespeichert · Slope ${String.format(Locale.US, "%.3f", newSi.slope)}"
+                                        calBgText = ""
+                                        calRawText = ""
+                                    }
+                                } else {
+                                    calFeedback = "Bitte gültigen BZ-Wert eingeben"
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Kalibrierung hinzufügen") }
+                        if (state.calibrations.isNotEmpty()) {
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.clearCalibrations()
+                                    calFeedback = "Kalibrierungen gelöscht"
+                                },
+                            ) { Text("Reset") }
+                        }
+                    }
+                    calFeedback?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = scheme.primary) }
+                    if (state.calibrations.isNotEmpty()) {
+                        state.calibrations.take(4).forEach { cal ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    "${calTimeFmt.format(Date(cal.timestampMs))} · ${GlucoseUnit.formatValue(cal.bgMgdl, settings.useMgdl)} (Raw ${String.format(Locale.US, "%.0f", cal.rawValue)})",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = scheme.onSurfaceVariant,
+                                )
+                                IconButton(
+                                    onClick = { viewModel.deleteCalibration(cal.id) },
+                                    modifier = Modifier.size(28.dp),
+                                ) {
+                                    Icon(Icons.Rounded.DeleteOutline, contentDescription = "Löschen", modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Direct Hardware: BLE Scanner, BT Glucose Meter, Libre Bridge, Dexcom & NFC Libre
+        item {
+            val context = LocalContext.current
+            val bleStatus by BleCollectorManager.status.collectAsState()
+            val blePermLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestMultiplePermissions()
+            ) {
+                if (BleCollectorManager.hasBlePermissions(context)) {
+                    BleCollectorManager.startScan(context)
+                }
+            }
+
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("Direkt-Hardware (BLE & NFC)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    SwitchRow(
+                        "Freestyle Libre NFC Scan aktiv",
+                        "Liest Libre 1/2 FRAM direkt bei Sensor-NFC-Kontakt ein (ISO 15693)",
+                        settings.nfcLibreEnabled,
+                        viewModel::setNfcLibreEnabled,
+                    )
+                    Text(
+                        "Aktiver BLE-Typ: ${settings.bleDeviceType}" +
+                            (if (settings.bleDeviceAddress.isNotBlank()) " · ${settings.bleDeviceName.ifBlank { settings.bleDeviceAddress }}" else ""),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = scheme.primary,
+                    )
+                    Text(
+                        "Status: ${bleStatus.lastStatusMessage}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            "none" to "Aus",
+                            "meter" to "BT Messgerät (0x1808)",
+                            "libre_bridge" to "Libre Bridge (Bubble/MM)",
+                            "dexcom" to "Dexcom G6/ONE",
+                        ).forEach { (typeKey, label) ->
+                            FilterChip(
+                                selected = settings.bleDeviceType == typeKey,
+                                onClick = {
+                                    viewModel.setBleDeviceConfig(typeKey, settings.bleDeviceAddress, settings.bleDeviceName)
+                                    if (typeKey == "none") BleCollectorManager.disconnect()
+                                },
+                                label = { Text(label) },
+                            )
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                if (bleStatus.scanning) {
+                                    BleCollectorManager.stopScan(context)
+                                } else if (BleCollectorManager.hasBlePermissions(context)) {
+                                    BleCollectorManager.startScan(context)
+                                } else {
+                                    val perms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                        arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+                                    } else {
+                                        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+                                    }
+                                    blePermLauncher.launch(perms)
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text(if (bleStatus.scanning) "Scan stoppen" else "BLE scannen") }
+                        if (settings.bleDeviceType != "none" && settings.bleDeviceAddress.isNotBlank()) {
+                            Button(
+                                onClick = {
+                                    if (bleStatus.connected) {
+                                        BleCollectorManager.disconnect()
+                                    } else {
+                                        BleCollectorManager.connectToConfigured(context.applicationContext as XdripYouApplication)
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                            ) { Text(if (bleStatus.connected) "Trennen" else "Verbinden") }
+                        }
+                    }
+                    bleStatus.discoveredDevices.take(6).forEach { dev ->
+                        Surface(
+                            color = scheme.surfaceContainerHigh,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    BleCollectorManager.stopScan(context)
+                                    viewModel.setBleDeviceConfig(dev.suggestedType, dev.address, dev.name)
+                                },
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(dev.name, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                                    Text("${dev.address} · Typ: ${dev.suggestedType}", style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant)
+                                }
+                                Text("${dev.rssi} dBm", style = MaterialTheme.typography.labelSmall, color = scheme.primary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
 @Composable
 private fun SettingsAlarmsOptionsPage(
     state: MainUiState,
+    viewModel: MainViewModel,
     onOpenDndPolicy: () -> Unit,
     onPickAlertRingtone: () -> Unit,
     onResetAlertRingtone: () -> Unit,
@@ -877,6 +1220,37 @@ private fun SettingsAlarmsOptionsPage(
                 }
             }
         }
+
+        item {
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("Wisch-Schlummern & Watch-Status", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    SwitchRow(
+                        "Wegwischen schlummern (Snooze-on-Dismiss)",
+                        "Schlummert aktive Alarme automatisch für ${settings.snoozeOnDismissMinutes} Min., sobald die Benachrichtigung weggewischt wird",
+                        settings.snoozeOnDismissEnabled,
+                        { viewModel.setSnoozeOnDismissConfig(it, settings.snoozeOnDismissMinutes) },
+                    )
+                    if (settings.snoozeOnDismissEnabled) {
+                        Slider(
+                            value = settings.snoozeOnDismissMinutes.toFloat(),
+                            onValueChange = { viewModel.setSnoozeOnDismissConfig(true, it.roundToInt()) },
+                            valueRange = 5f..120f,
+                            steps = 22,
+                        )
+                    }
+                    SwitchRow(
+                        "Wear / AAPS ExternalStatus-Broadcast senden",
+                        "Sendet Statusline + IOB/COB via com.eveningoutpost.dexdrip.ExternalStatus",
+                        settings.watchStatusBroadcastEnabled,
+                        viewModel::setWatchStatusBroadcast,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -884,6 +1258,7 @@ private fun SettingsAlarmsOptionsPage(
 @Composable
 private fun SettingsDisplayPage(
     state: MainUiState,
+    viewModel: MainViewModel,
     onSetUseMgdl: (Boolean) -> Unit,
     onSetTargetRange: (Double, Double) -> Unit,
     onSetPredictionCurve: (Boolean) -> Unit,
@@ -968,7 +1343,37 @@ private fun SettingsDisplayPage(
                         }
                     }
                     SwitchRow("24h-Statuszeile auf Übersicht", "Zeigt TIR, Ø, GMI und CV% kompakt unter dem Chart", settings.showExtraStatusLine, onSetShowExtraStatusLine)
+                    SwitchRow(
+                        "Sensor-Rauschfilter (Glättung)",
+                        "5-Punkt Savitzky-Golay Glättung bei sprunghaften Werten (Noise-Index ${String.format(Locale.US, "%.2f", state.noiseIndex)})",
+                        settings.smoothChartNoise,
+                        { viewModel.setChartAdvancedVisuals(it, settings.showChartIobCurve) },
+                    )
+                    SwitchRow(
+                        "IOB-Wirkungskurve im Chart einblenden",
+                        "Zeigt aktives Insulin als sanfte Fläche am unteren Chart-Rand",
+                        settings.showChartIobCurve,
+                        { viewModel.setChartAdvancedVisuals(settings.smoothChartNoise, it) },
+                    )
                     SwitchRow("Bildschirm wach halten (Nachttisch)", "Verhindert Auto-Sperre solange xDrip 2 You offen ist", settings.keepScreenOn, onSetKeepScreenOn)
+                    val overlayCtx = LocalContext.current
+                    SwitchRow(
+                        "Schwebende BG-Blase (Floating Overlay)",
+                        "Zeigt Blutzucker & Trend dauerhaft über anderen Apps an",
+                        settings.floatingOverlayEnabled,
+                        { wantEnable ->
+                            if (wantEnable && !Settings.canDrawOverlays(overlayCtx)) {
+                                overlayCtx.startActivity(
+                                    Intent(
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:${overlayCtx.packageName}"),
+                                    ).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }
+                                )
+                            } else {
+                                viewModel.setFloatingOverlayEnabled(wantEnable)
+                            }
+                        },
+                    )
                 }
             }
         }
@@ -995,24 +1400,36 @@ private fun SettingsDisplayPage(
                         },
                     )
                     if (settings.showIobCob) {
-                        Text(
-                            "Insulin-Wirkdauer (DIA): ${String.format(Locale.US, "%.1f", settings.insulinDurationMinutes / 60.0)} Std. (${settings.insulinDurationMinutes} Min.)",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Slider(
-                            value = settings.insulinDurationMinutes.toFloat(),
-                            onValueChange = {
-                                onSetIobCobConfig(
-                                    true,
-                                    it.roundToInt(),
-                                    settings.insulinPeakMinutes,
-                                    settings.carbDelayMinutes,
-                                    settings.carbAbsorptionGramsPerHour,
+                        Text("Insulin-Modell (xDrip Presets)", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            InsulinPreset.entries.forEach { preset ->
+                                FilterChip(
+                                    selected = settings.insulinPreset == preset.wireValue,
+                                    onClick = { viewModel.setInsulinPreset(preset.wireValue) },
+                                    label = { Text(preset.labelDe) },
                                 )
-                            },
-                            valueRange = 180f..420f,
-                            steps = 7,
-                        )
+                            }
+                        }
+                        if (InsulinPreset.fromWire(settings.insulinPreset) == InsulinPreset.CUSTOM) {
+                            Text(
+                                "Insulin-Wirkdauer (DIA): ${String.format(Locale.US, "%.1f", settings.insulinDurationMinutes / 60.0)} Std. (${settings.insulinDurationMinutes} Min.)",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Slider(
+                                value = settings.insulinDurationMinutes.toFloat(),
+                                onValueChange = {
+                                    onSetIobCobConfig(
+                                        true,
+                                        it.roundToInt(),
+                                        settings.insulinPeakMinutes,
+                                        settings.carbDelayMinutes,
+                                        settings.carbAbsorptionGramsPerHour,
+                                    )
+                                },
+                                valueRange = 180f..420f,
+                                steps = 7,
+                            )
+                        }
                         Text("Insulin-Profil (Peak)", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             listOf(45 to "Ultra-Schnell (45m)", 65 to "Schnell (65m)", 85 to "Klassisch (85m)").forEach { (peak, label) ->
@@ -1076,12 +1493,25 @@ private fun SettingsDisplayPage(
         item {
             val schedule = state.basalSchedule
             var selectedHour by remember { mutableIntStateOf(0) }
+            var showAapsDialog by remember { mutableStateOf(false) }
+            var aapsJsonInput by remember { mutableStateOf("") }
+            var aapsFeedback by remember { mutableStateOf<String?>(null) }
             Card(shape = RoundedCornerShape(24.dp)) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text("Basal-Profil (24-Std.)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Basal-Profil (24-Std.)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        OutlinedButton(onClick = { showAapsDialog = true }) {
+                            Text("AAPS JSON")
+                        }
+                    }
+                    aapsFeedback?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary) }
                     SwitchRow(
                         "Aktuelle Basalrate in Übersicht anzeigen",
                         "Tagesgesamtbasal: ${String.format(Locale.US, "%.1f", schedule.totalDailyUnits)} IE/Tag",
@@ -1129,6 +1559,31 @@ private fun SettingsDisplayPage(
                     }
                 }
             }
+            if (showAapsDialog) {
+                AlertDialog(
+                    onDismissRequest = { showAapsDialog = false },
+                    title = { Text("AAPS / OpenAPS Profil importieren") },
+                    text = {
+                        OutlinedTextField(
+                            value = aapsJsonInput,
+                            onValueChange = { aapsJsonInput = it },
+                            label = { Text("Exportiertes AAPS Profil-JSON einfügen") },
+                            minLines = 4,
+                            maxLines = 8,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    },
+                    confirmButton = {
+                        Button(onClick = {
+                            viewModel.importAapsProfileJson(aapsJsonInput) { aapsFeedback = it }
+                            showAapsDialog = false
+                        }) { Text("Importieren") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showAapsDialog = false }) { Text("Abbrechen") }
+                    },
+                )
+            }
         }
 
         item {
@@ -1158,6 +1613,7 @@ private fun SettingsDisplayPage(
 @Composable
 private fun SettingsCloudPage(
     state: MainUiState,
+    viewModel: MainViewModel,
     onSetNightscoutConfig: (String, String, Boolean, Boolean) -> Unit,
     onSetNightscoutExtraConfig: (Boolean, Boolean) -> Unit,
     onSetNightscoutDeviceStatusEnabled: (Boolean) -> Unit,

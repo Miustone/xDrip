@@ -207,6 +207,8 @@ fun XdripYouRoot(
                 onSetLowPrediction = viewModel::setLowPrediction,
                 onSetHighPrediction = viewModel::setHighPrediction,
                 onSetPersistentHigh = viewModel::setPersistentHigh,
+                onUpsertReminder = viewModel::upsertReminder,
+                onDeleteReminder = viewModel::deleteReminder,
                 modifier = mod,
             )
             2 -> HistoryScreen(
@@ -220,6 +222,7 @@ fun XdripYouRoot(
                 section = settingsSection,
                 onSelectSection = { settingsSection = it },
                 state = state,
+                viewModel = viewModel,
                 onReopenOnboarding = viewModel::reopenOnboarding,
                 onOpenNotificationListener = onOpenNotificationListener,
                 onRequestPostNotifications = onRequestPostNotifications,

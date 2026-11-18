@@ -4,16 +4,22 @@ import dev.xdripyou.app.data.db.ActiveAlertEntity
 import dev.xdripyou.app.data.db.AlertRuleEntity
 import dev.xdripyou.app.data.db.AppDatabase
 import dev.xdripyou.app.data.db.BgReadingEntity
+import dev.xdripyou.app.data.db.CalibrationEntity
 import dev.xdripyou.app.data.db.CollectorEventEntity
+import dev.xdripyou.app.data.db.ReminderEntity
 import dev.xdripyou.app.data.db.TreatmentEntity
 import dev.xdripyou.app.domain.ActiveAlertState
 import dev.xdripyou.app.domain.AlertRule
+import dev.xdripyou.app.domain.CalibrationEngine
+import dev.xdripyou.app.domain.CalibrationRecord
 import dev.xdripyou.app.domain.CamApsParser
 import dev.xdripyou.app.domain.CollectorEvent
 import dev.xdripyou.app.domain.ExternalPumpStatus
 import dev.xdripyou.app.domain.GlucoseReading
 import dev.xdripyou.app.domain.IobCobCalculator
 import dev.xdripyou.app.domain.IobCobSnapshot
+import dev.xdripyou.app.domain.ReminderItem
+import dev.xdripyou.app.domain.SlopeIntercept
 import dev.xdripyou.app.domain.TreatmentEntry
 import dev.xdripyou.app.domain.TrendArrow
 import kotlinx.coroutines.flow.Flow
@@ -528,5 +534,133 @@ class GlucoseRepository(
             .map { it.trim() }
             .filter { it.isNotEmpty() }
         return base + custom
+    }
+
+    // --- Calibrations (WLS Linear Regression) ---
+
+    fun observeCalibrations(limit: Int = 50): Flow<List<CalibrationRecord>> =
+        db.calibrationDao().observeRecent(limit).map { list -> list.map { it.toDomain() } }
+
+    suspend fun getRecentCalibrations(limit: Int = 30): List<CalibrationRecord> =
+        db.calibrationDao().getRecent(limit).map { it.toDomain() }
+
+    suspend fun currentSlopeIntercept(): SlopeIntercept {
+        val cals = getRecentCalibrations(20)
+        return CalibrationEngine.calculateWls(cals)
+    }
+
+    suspend fun addCalibration(
+        bgMgdl: Double,
+        rawValue: Double? = null,
+        timestampMs: Long = System.currentTimeMillis(),
+        sensorId: String = "",
+        note: String = "Blutzucker-Kalibrierung",
+    ): SlopeIntercept {
+        val latestReading = getLatestReadings(1).firstOrNull()
+        val effectiveRaw = rawValue ?: latestReading?.mgdl ?: bgMgdl
+        val prior = getRecentCalibrations(20)
+        val previewList = prior + CalibrationRecord(
+            timestampMs = timestampMs,
+            bgMgdl = bgMgdl,
+            rawValue = effectiveRaw,
+            slope = 1.0,
+            intercept = 0.0,
+            sensorId = sensorId,
+            note = note,
+        )
+        val wls = CalibrationEngine.calculateWls(previewList)
+        db.calibrationDao().upsert(
+            CalibrationEntity.fromDomain(
+                CalibrationRecord(
+                    timestampMs = timestampMs,
+                    bgMgdl = bgMgdl,
+                    rawValue = effectiveRaw,
+                    slope = wls.slope,
+                    intercept = wls.intercept,
+                    sensorId = sensorId,
+                    note = note,
+                )
+            )
+        )
+        // Also log fingerstick calibration as a BG Check treatment marker
+        addOrUpdateTreatment(
+            TreatmentEntry(
+                timestampMs = timestampMs,
+                bloodGlucoseMgdl = bgMgdl,
+                note = "Kalibrierung",
+                eventType = "BG Check",
+            )
+        )
+        return wls
+    }
+
+    suspend fun deleteCalibration(id: Long) = db.calibrationDao().deleteById(id)
+
+    suspend fun clearCalibrations() = db.calibrationDao().deleteAll()
+
+    // --- Reminders ---
+
+    fun observeReminders(): Flow<List<ReminderItem>> =
+        db.reminderDao().observeAll().map { list -> list.map { it.toDomain() } }
+
+    suspend fun getReminders(): List<ReminderItem> =
+        db.reminderDao().getAll().map { it.toDomain() }
+
+    suspend fun upsertReminder(item: ReminderItem): Long =
+        db.reminderDao().upsert(ReminderEntity.fromDomain(item))
+
+    suspend fun deleteReminder(id: Long) =
+        db.reminderDao().deleteById(id)
+
+    // --- CareLink & WebFollow Sync ---
+
+    suspend fun syncCareLink(): Result<String> {
+        val settings = settingsStore.current()
+        if (!settings.careLinkEnabled) return Result.failure(IllegalStateException("CareLink deaktiviert"))
+        val region = CareLinkRegion.fromWire(settings.careLinkRegion)
+        val res = CareLinkFollowClient.fetchLatest(region, settings.careLinkUsername, settings.careLinkPassword)
+        if (res.isFailure) return Result.failure(res.exceptionOrNull()!!)
+        var inserted = 0
+        val readings = res.getOrThrow()
+        for (r in readings) {
+            val out = insertReading(
+                mgdl = r.mgdl,
+                timestampMs = r.timestampMs,
+                source = "CareLink (${region.wireValue.uppercase()})",
+                rawText = null,
+                applyDeduplication = false,
+                overrideTrend = r.trend,
+            )
+            if (out is InsertOutcome.Inserted) inserted++
+        }
+        val last = readings.lastOrNull()
+        if (last?.activeInsulin != null || last?.pumpBatteryPercent != null) {
+            _externalPumpStatus.value = ExternalPumpStatus(
+                timestampMs = last.timestampMs,
+                iobUnits = last.activeInsulin,
+                pumpBatteryPercent = last.pumpBatteryPercent,
+            )
+        }
+        return Result.success("CareLink OK · $inserted neu (${readings.size} gelesen)")
+    }
+
+    suspend fun syncWebFollow(): Result<String> {
+        val settings = settingsStore.current()
+        if (!settings.webFollowEnabled) return Result.failure(IllegalStateException("WebFollow deaktiviert"))
+        val res = WebFollowClient.fetchLatest(settings.webFollowUrl, settings.webFollowJsonPath)
+        if (res.isFailure) return Result.failure(res.exceptionOrNull()!!)
+        var inserted = 0
+        for (r in res.getOrThrow()) {
+            val out = insertReading(
+                mgdl = r.mgdl,
+                timestampMs = r.timestampMs,
+                source = "WebFollow",
+                rawText = null,
+                applyDeduplication = false,
+                overrideTrend = r.trend,
+            )
+            if (out is InsertOutcome.Inserted) inserted++
+        }
+        return Result.success("WebFollow OK · $inserted neu")
     }
 }

@@ -7,12 +7,15 @@ import dev.xdripyou.app.XdripYouApplication
 import dev.xdripyou.app.data.HealthConnectSyncManager
 import dev.xdripyou.app.data.InsertOutcome
 import dev.xdripyou.app.data.SettingsStore
+import dev.xdripyou.app.domain.AapsProfileImporter
 import dev.xdripyou.app.domain.ActiveAlertState
 import dev.xdripyou.app.domain.AgpStatsCalculator
 import dev.xdripyou.app.domain.AlertProfile
 import dev.xdripyou.app.domain.AlertRule
 import dev.xdripyou.app.domain.AppSettings
 import dev.xdripyou.app.domain.BasalSchedule
+import dev.xdripyou.app.domain.CalibrationEngine
+import dev.xdripyou.app.domain.CalibrationRecord
 import dev.xdripyou.app.domain.CamApsParser
 import dev.xdripyou.app.domain.ChartWindow
 import dev.xdripyou.app.domain.CollectorEvent
@@ -25,6 +28,8 @@ import dev.xdripyou.app.domain.IobCobCalculator
 import dev.xdripyou.app.domain.IobCobSnapshot
 import dev.xdripyou.app.domain.PermissionStatus
 import dev.xdripyou.app.domain.PredictionPoint
+import dev.xdripyou.app.domain.ReminderItem
+import dev.xdripyou.app.domain.SlopeIntercept
 import dev.xdripyou.app.domain.SourceUnitMode
 import dev.xdripyou.app.domain.StatsPeriod
 import dev.xdripyou.app.domain.ThemeModeOption
@@ -57,9 +62,17 @@ data class MainUiState(
     val healthConnectAvailable: Boolean = false,
     val healthConnectGranted: Boolean = false,
     val permissions: PermissionStatus = PermissionStatus(),
+    val calibrations: List<CalibrationRecord> = emptyList(),
+    val reminders: List<ReminderItem> = emptyList(),
     val nowMs: Long = System.currentTimeMillis(),
 ) {
     val latestReading: GlucoseReading? get() = readings24h.firstOrNull()
+
+    val slopeIntercept: SlopeIntercept
+        get() = CalibrationEngine.calculateWls(calibrations)
+
+    val noiseIndex: Double
+        get() = CalibrationEngine.estimateNoiseLevel(readings24h)
 
     val basalSchedule: BasalSchedule
         get() = BasalSchedule.decodeWire(settings.basalScheduleWire)
@@ -161,13 +174,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         MetaBundle(events, window, statsPeriod, extStats, perms)
     }
 
+    private val syncAndStatusFlow = combine(
+        repo.externalPumpStatusFlow,
+        healthConnectGrantedFlow,
+        repo.observeCalibrations(30),
+        repo.observeReminders(),
+    ) { pumpStatus, hcGranted, cals, reminders ->
+        SyncAndExtraBundle(pumpStatus, hcGranted, cals, reminders)
+    }
+
     val uiState: StateFlow<MainUiState> = combine(
         primaryDataFlow,
         metaFlow,
-        repo.externalPumpStatusFlow,
-        healthConnectGrantedFlow,
+        syncAndStatusFlow,
         nowMsFlow,
-    ) { primary, meta, pumpStatus, hcGranted, nowMs ->
+    ) { primary, meta, extra, nowMs ->
         MainUiState(
             isLoaded = true,
             settings = primary.settings,
@@ -179,10 +200,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             chartWindow = meta.window,
             statsPeriod = meta.statsPeriod,
             extendedStats = meta.extendedStats,
-            externalPumpStatus = pumpStatus,
+            externalPumpStatus = extra.pumpStatus,
             healthConnectAvailable = HealthConnectSyncManager.isAvailable(app),
-            healthConnectGranted = hcGranted,
+            healthConnectGranted = extra.hcGranted,
             permissions = meta.perms,
+            calibrations = extra.calibrations,
+            reminders = extra.reminders,
             nowMs = nowMs,
         )
     }.stateIn(
@@ -980,6 +1003,153 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             onResult(res.getOrElse { "Import-Fehler: ${it.message}" })
         }
     }
+
+    fun addCalibration(bgMgdl: Double, rawValue: Double?, note: String, onDone: (SlopeIntercept) -> Unit) {
+        viewModelScope.launch {
+            val si = repo.addCalibration(bgMgdl = bgMgdl, rawValue = rawValue, note = note)
+            onDone(si)
+        }
+    }
+
+    fun deleteCalibration(id: Long) {
+        viewModelScope.launch { repo.deleteCalibration(id) }
+    }
+
+    fun clearCalibrations() {
+        viewModelScope.launch { repo.clearCalibrations() }
+    }
+
+    fun upsertReminder(item: ReminderItem) {
+        viewModelScope.launch { repo.upsertReminder(item) }
+    }
+
+    fun deleteReminder(id: Long) {
+        viewModelScope.launch { repo.deleteReminder(id) }
+    }
+
+    fun setInsulinPreset(wireValue: String) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.INSULIN_PRESET] = wireValue }
+        }
+    }
+
+    fun setSnoozeOnDismissConfig(enabled: Boolean, minutes: Int) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.SNOOZE_ON_DISMISS_ENABLED] = enabled
+                it[SettingsStore.Keys.SNOOZE_ON_DISMISS_MINUTES] = minutes.coerceIn(5, 240)
+            }
+        }
+    }
+
+    fun setWatchStatusBroadcast(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.WATCH_STATUS_BROADCAST] = enabled }
+        }
+    }
+
+    fun setFloatingOverlayEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.FLOATING_OVERLAY] = enabled }
+        }
+    }
+
+    fun setChartAdvancedVisuals(smoothNoise: Boolean, showIobCurve: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.SMOOTH_CHART_NOISE] = smoothNoise
+                it[SettingsStore.Keys.SHOW_CHART_IOB_CURVE] = showIobCurve
+            }
+        }
+    }
+
+    fun setCareLinkConfig(enabled: Boolean, region: String, username: String, password: String) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.CARELINK_ENABLED] = enabled
+                it[SettingsStore.Keys.CARELINK_REGION] = region
+                it[SettingsStore.Keys.CARELINK_USER] = username.trim()
+                it[SettingsStore.Keys.CARELINK_PASS] = password
+            }
+        }
+    }
+
+    fun syncCareLinkNow(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val res = repo.syncCareLink()
+            nowMsFlow.value = System.currentTimeMillis()
+            alertEngine.refreshOngoingNotification()
+            onResult(res.getOrElse { "CareLink Fehler: ${it.message}" })
+        }
+    }
+
+    fun setWebFollowConfig(enabled: Boolean, url: String, jsonPath: String) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.WEB_FOLLOW_ENABLED] = enabled
+                it[SettingsStore.Keys.WEB_FOLLOW_URL] = url.trim()
+                it[SettingsStore.Keys.WEB_FOLLOW_JSON_PATH] = jsonPath.trim().ifEmpty { "sgv" }
+            }
+        }
+    }
+
+    fun syncWebFollowNow(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val res = repo.syncWebFollow()
+            nowMsFlow.value = System.currentTimeMillis()
+            alertEngine.refreshOngoingNotification()
+            onResult(res.getOrElse { "WebFollow Fehler: ${it.message}" })
+        }
+    }
+
+    fun importAapsProfileJson(jsonText: String, onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val parsed = AapsProfileImporter.parseProfileJson(jsonText)
+            if (parsed.isFailure) {
+                onResult("AAPS-Import Fehler: ${parsed.exceptionOrNull()?.message}")
+                return@launch
+            }
+            val p = parsed.getOrThrow()
+            settingsStore.update { prefs ->
+                if (p.basalBlocks.isNotEmpty()) {
+                    prefs[SettingsStore.Keys.BASAL_SCHEDULE_WIRE] = BasalSchedule(p.toHourlyRates()).encodeWire()
+                    prefs[SettingsStore.Keys.SHOW_BASAL_RATE] = true
+                }
+                p.carbRatioGramsPerUnit?.let { prefs[SettingsStore.Keys.CARB_RATIO] = it }
+                p.isfMgdlPerUnit?.let { prefs[SettingsStore.Keys.ISF_MGDL] = it }
+                p.insulinDurationMinutes?.let {
+                    prefs[SettingsStore.Keys.INSULIN_DURATION_MINUTES] = it
+                    prefs[SettingsStore.Keys.INSULIN_PRESET] = "custom"
+                }
+            }
+            onResult("AAPS importiert: ${p.basalBlocks.size} Basalblöcke" +
+                (p.carbRatioGramsPerUnit?.let { ", CR 1:${it.toInt()}" } ?: "") +
+                (p.isfMgdlPerUnit?.let { ", ISF ${it.toInt()}" } ?: ""))
+        }
+    }
+
+    fun setBleDeviceConfig(type: String, address: String, name: String) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.BLE_DEVICE_TYPE] = type
+                it[SettingsStore.Keys.BLE_DEVICE_ADDRESS] = address.trim()
+                it[SettingsStore.Keys.BLE_DEVICE_NAME] = name.trim()
+            }
+        }
+    }
+
+    fun setNfcLibreEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.NFC_LIBRE_ENABLED] = enabled }
+        }
+    }
+
+    private data class SyncAndExtraBundle(
+        val pumpStatus: ExternalPumpStatus?,
+        val hcGranted: Boolean,
+        val calibrations: List<CalibrationRecord>,
+        val reminders: List<ReminderItem>,
+    )
 
     private data class PrimaryBundle(
         val settings: AppSettings,

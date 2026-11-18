@@ -98,5 +98,31 @@ class XdripBroadcastReceiver : BroadcastReceiver() {
             }
             context.sendBroadcast(intent)
         }
+
+        const val ACTION_EXTERNAL_STATUS = "com.eveningoutpost.dexdrip.ExternalStatus"
+
+        fun sendWearExternalStatus(
+            context: Context,
+            reading: dev.xdripyou.app.domain.GlucoseReading,
+            iobUnits: Double,
+            cobGrams: Double,
+            useMgdl: Boolean,
+        ) {
+            val formattedBg = dev.xdripyou.app.domain.GlucoseUnit.formatValue(reading.mgdl, useMgdl)
+            val statusLine = buildString {
+                append("$formattedBg ${reading.trend.symbol}")
+                if (iobUnits >= 0.05) append(" · IOB ${String.format(java.util.Locale.US, "%.2f", iobUnits)}U")
+                if (cobGrams >= 1.0) append(" · COB ${cobGrams.toInt()}g")
+            }
+            val intent = Intent(ACTION_EXTERNAL_STATUS).apply {
+                putExtra("com.eveningoutpost.dexdrip.Extras.Statusline", statusLine)
+                putExtra("com.eveningoutpost.dexdrip.Extras.BgEstimate", reading.mgdl)
+                putExtra("com.eveningoutpost.dexdrip.Extras.Time", reading.timestampMs)
+                putExtra("com.eveningoutpost.dexdrip.Extras.Iob", iobUnits)
+                putExtra("com.eveningoutpost.dexdrip.Extras.Cob", cobGrams)
+                addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+            }
+            context.sendBroadcast(intent)
+        }
     }
 }

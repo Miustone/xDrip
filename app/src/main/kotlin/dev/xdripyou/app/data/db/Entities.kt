@@ -5,8 +5,10 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import dev.xdripyou.app.domain.ActiveAlertState
 import dev.xdripyou.app.domain.AlertRule
+import dev.xdripyou.app.domain.CalibrationRecord
 import dev.xdripyou.app.domain.CollectorEvent
 import dev.xdripyou.app.domain.GlucoseReading
+import dev.xdripyou.app.domain.ReminderItem
 import dev.xdripyou.app.domain.TreatmentEntry
 import dev.xdripyou.app.domain.TrendArrow
 
@@ -186,4 +188,82 @@ data class CollectorEventEntity(
         parsedMgdl = parsedMgdl,
         message = message,
     )
+}
+
+@Entity(
+    tableName = "calibrations",
+    indices = [Index(value = ["timestampMs"])],
+)
+data class CalibrationEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val timestampMs: Long,
+    val bgMgdl: Double,
+    val rawValue: Double,
+    val slope: Double,
+    val intercept: Double,
+    val sensorId: String = "",
+    val slopeConfidence: Double = 0.5,
+    val sensorConfidence: Double = 0.8,
+    val note: String = "",
+) {
+    fun toDomain(): CalibrationRecord = CalibrationRecord(
+        id = id,
+        timestampMs = timestampMs,
+        bgMgdl = bgMgdl,
+        rawValue = rawValue,
+        slope = slope,
+        intercept = intercept,
+        sensorId = sensorId,
+        slopeConfidence = slopeConfidence,
+        sensorConfidence = sensorConfidence,
+        note = note,
+    )
+
+    companion object {
+        fun fromDomain(record: CalibrationRecord): CalibrationEntity = CalibrationEntity(
+            id = record.id,
+            timestampMs = record.timestampMs,
+            bgMgdl = record.bgMgdl,
+            rawValue = record.rawValue,
+            slope = record.slope,
+            intercept = record.intercept,
+            sensorId = record.sensorId,
+            slopeConfidence = record.slopeConfidence,
+            sensorConfidence = record.sensorConfidence,
+            note = record.note,
+        )
+    }
+}
+
+@Entity(tableName = "reminders")
+data class ReminderEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val title: String,
+    val intervalHours: Int,
+    val nextDueMs: Long,
+    val enabled: Boolean = true,
+    val snoozedMinutes: Int = 60,
+    val lastTriggeredMs: Long = 0L,
+) {
+    fun toDomain(): ReminderItem = ReminderItem(
+        id = id,
+        title = title,
+        intervalHours = intervalHours,
+        nextDueMs = nextDueMs,
+        enabled = enabled,
+        snoozedMinutes = snoozedMinutes,
+        lastTriggeredMs = lastTriggeredMs,
+    )
+
+    companion object {
+        fun fromDomain(item: ReminderItem): ReminderEntity = ReminderEntity(
+            id = item.id,
+            title = item.title,
+            intervalHours = item.intervalHours,
+            nextDueMs = item.nextDueMs,
+            enabled = item.enabled,
+            snoozedMinutes = item.snoozedMinutes,
+            lastTriggeredMs = item.lastTriggeredMs,
+        )
+    }
 }

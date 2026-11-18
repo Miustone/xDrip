@@ -40,8 +40,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.xdripyou.app.domain.CalibrationEngine
 import dev.xdripyou.app.domain.GlucoseReading
 import dev.xdripyou.app.domain.GlucoseUnit
+import dev.xdripyou.app.domain.IobCobCalculator
 import dev.xdripyou.app.domain.PredictionPoint
 import dev.xdripyou.app.domain.TreatmentEntry
 import dev.xdripyou.app.ui.theme.LocalGlucoseColors
@@ -66,6 +68,11 @@ fun GlucoseChart(
     showGrid: Boolean = true,
     showAverageLine: Boolean = false,
     chartMaxMgdl: Int = 0,
+    smoothNoise: Boolean = false,
+    showIobCurve: Boolean = false,
+    insulinDurationMinutes: Int = 270,
+    insulinPeakMinutes: Int = 65,
+    insulinOnsetMinutes: Int = 15,
     chartHeight: Dp? = 210.dp,
     modifier: Modifier = Modifier,
 ) {
@@ -358,7 +365,47 @@ fun GlucoseChart(
             }
 
             // 6. Curve + points (chronological)
-            val sorted = readings.asReversed()
+            val chronological = readings.asReversed()
+            val sorted = if (smoothNoise) CalibrationEngine.smoothReadings(chronological) else chronological
+
+            // 5b. Subtle IOB activity overlay at chart bottom
+            if (showIobCurve && treatments.any { it.insulinUnits > 0.0 }) {
+                val steps = 36
+                val iobValues = DoubleArray(steps + 1)
+                var maxIob = 0.0
+                for (s in 0..steps) {
+                    val ms = startMs + (totalSpanMs * s) / steps
+                    val iobAt = IobCobCalculator.calculateIob(
+                        treatments = treatments,
+                        atMs = ms,
+                        durationMinutes = insulinDurationMinutes,
+                        peakMinutes = insulinPeakMinutes,
+                        onsetMinutes = insulinOnsetMinutes,
+                    )
+                    iobValues[s] = iobAt
+                    if (iobAt > maxIob) maxIob = iobAt
+                }
+                if (maxIob > 0.05) {
+                    val iobMaxHeightPx = chartH * 0.22f
+                    val scaleDenominator = max(maxIob, 2.0)
+                    val iobPath = Path().apply {
+                        moveTo(chartLeft, chartBottom)
+                        for (s in 0..steps) {
+                            val ms = startMs + (totalSpanMs * s) / steps
+                            val px = xForMs(ms)
+                            val py = chartBottom - ((iobValues[s] / scaleDenominator) * iobMaxHeightPx).toFloat()
+                            lineTo(px, py)
+                        }
+                        lineTo(xForMs(endMs), chartBottom)
+                        close()
+                    }
+                    drawPath(
+                        path = iobPath,
+                        color = scheme.primary.copy(alpha = 0.14f),
+                    )
+                }
+            }
+
             if (!pointsOnly) {
                 val path = Path()
                 var started = false

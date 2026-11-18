@@ -6,6 +6,36 @@ Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 
 ---
 
+## [26.11.11] - 2026-11-18
+
+### Hinzugefügt & Portiert (Direkt-Hardware, Overlay & Protokolle)
+- **Direkt-Hardware BLE-Kollektor (`BleCollectorService.kt`, `HardwareProtocols.kt`):**
+  - Integrierter Bluetooth Low Energy Scanner & GATT-Kollektor für **Bluetooth-Blutzuckermessgeräte** (SIG Profil `0x1808` / `0x2A18` IEEE-11073 SFLOAT16 + `0x2A52` RACP), **Libre BLE-Bridges** (Bubble / MiaoMiao Paket-Reassembly) und **Dexcom G6/ONE** GATT-Streams (`GlucoseRxMessage` `0x31`/`0x4E`).
+- **Freestyle Libre NFC FRAM Reader (`NfcLibreReader.kt`, `nfc_tech_filter.xml`):**
+  - Direkte `NfcV` (ISO 15693) Block-Auslesung (344 Bytes FRAM), CRC16-Kermit-Verifikation, 11-Zeichen-Seriennummer-Dekodierung (`decodeSerialNumber`) sowie WLS-Kalibrierungsanwendung direkt bei `ACTION_TECH_DISCOVERED`.
+- **Schwebende Blutzucker-Blase (`FloatingOverlayService.kt`):**
+  - Portierung von xDrips `AlwaysOnDisplayService` als verschiebbares System-Overlay (`SYSTEM_ALERT_WINDOW`) mit Live-Wert, Trendpfeil und Alter über anderen Apps.
+- **Unit-Tests (`HardwareProtocolsTest.kt`):**
+  - Verifiziert SFLOAT16 (`mg/dL` & `mmol/L`), Libre CRC16/Serial/FRAM + Bubble-Chunk-Reassembly und Dexcom-BLE-Dekodierung.
+- **Versionsstand:** `versionName = "26.11.11"`, `versionCode = 261111`.
+
+---
+
+## [26.11.10] - 2026-11-18
+
+### Hinzugefügt & Portiert (Kalibrierung, Erinnerungen, CareLink, AAPS-Import & UX)
+- **Sensor-Kalibrierungswerks & Rauschfilter (`CalibrationEngine.kt`, Room Migration `2 → 3`):**
+  - Portierung von xDrips gewichteter linearer Regression (WLS: `slope`, `intercept`, MARD %, Ausreißer-Begrenzung) inkl. Persistenz in Room (`calibrations`), Noise-Index-Berechnung und optionaler 5-Punkt Savitzky-Golay Chart-Glättung.
+- **AAPS / OpenAPS Profil-Importer & Insulin-Modelle (`AapsProfileImporter.kt`, `IobCobCalculator.kt`):**
+  - Direkt-Import von AAPS JSON-Profilen (`basal`, `carbratio`, `sens`, `dia`, `units`), wählbare **Insulin-Presets** (Fiasp, Lyumjev, NovoRapid, Benutzerdefiniert) sowie optionale **IOB-Wirkungskurve im Chart**.
+- **Erinnerungen, Snooze-Dialog & Wegwischen-Schlummern (`SnoozePickerSheet.kt`, `AlertsScreen.kt`, `AlertActionReceiver.kt`):**
+  - Eigene **Erinnerungen** (Katheterwechsel, Sensor, Medikamente mit Intervall-Tracking & Benachrichtigungen), frei wählbarer **Schlummer-Dialog** (10 Min. bis 12 Std. + Bereich) sowie **Snooze-on-Dismiss** (`DeleteIntent`).
+- **CareLink Connect, generischer WebFollow & Wear-Broadcasts (`CareLinkFollowClient.kt`, `WebFollowClient.kt`, `XdripBroadcastReceiver.kt`):**
+  - Cloud-Follower für Medtronic CareLink Connect (EU/US) und beliebige JSON-Web-Endpoints plus `com.eveningoutpost.dexdrip.ExternalStatus` Wear/AAPS-Broadcast.
+- **Versionsstand:** `versionName = "26.11.10"`, `versionCode = 261110`.
+
+---
+
 ## [26.11.9] - 2026-11-18
 
 ### Hinzugefügt & Portiert (Sync-Ökosystem komplettiert)

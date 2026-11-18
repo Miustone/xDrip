@@ -59,6 +59,7 @@ import dev.xdripyou.app.domain.TreatmentEntry
 import dev.xdripyou.app.ui.MainUiState
 import dev.xdripyou.app.ui.components.ActiveAlertBanner
 import dev.xdripyou.app.ui.components.GlucoseChart
+import dev.xdripyou.app.ui.components.SnoozePickerSheet
 import dev.xdripyou.app.ui.components.TreatmentEditorSheet
 import dev.xdripyou.app.ui.theme.LocalGlucoseColors
 import java.util.Locale
@@ -80,6 +81,7 @@ fun OverviewScreen(
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val settings = state.settings
     var showTreatmentSheet by remember { mutableStateOf(false) }
+    var showSnoozeSheet by remember { mutableStateOf(false) }
 
     if (isLandscape) {
         Row(
@@ -154,6 +156,7 @@ fun OverviewScreen(
                     nowMs = state.nowMs,
                     onSnooze = onSnoozeAlert,
                     onStop = onStopAlert,
+                    onOpenCustomSnooze = { showSnoozeSheet = true },
                 )
             }
 
@@ -192,6 +195,14 @@ fun OverviewScreen(
                 showExtraStatusLine = settings.showExtraStatusLine,
             )
         }
+    }
+
+    if (showSnoozeSheet) {
+        SnoozePickerSheet(
+            onDismiss = { showSnoozeSheet = false },
+            onSnoozeActive = onSnoozeAlert,
+            onSilenceScope = { _, mins -> onSnoozeAlert(mins) },
+        )
     }
 
     if (showTreatmentSheet) {
@@ -494,6 +505,7 @@ private fun ChartPanelCard(
                 }
             }
             Spacer(Modifier.height(8.dp))
+            val preset = dev.xdripyou.app.domain.InsulinPreset.fromWire(settings.insulinPreset)
             GlucoseChart(
                 readings = state.readingsInWindow,
                 treatments = if (settings.showChartTreatments) state.treatmentsInWindow else emptyList(),
@@ -507,6 +519,11 @@ private fun ChartPanelCard(
                 showGrid = settings.showChartGrid,
                 showAverageLine = settings.showChartAverageLine,
                 chartMaxMgdl = settings.chartMaxMgdl,
+                smoothNoise = settings.smoothChartNoise,
+                showIobCurve = settings.showChartIobCurve && settings.showIobCob,
+                insulinDurationMinutes = if (preset == dev.xdripyou.app.domain.InsulinPreset.CUSTOM) settings.insulinDurationMinutes else preset.durationMinutes,
+                insulinPeakMinutes = if (preset == dev.xdripyou.app.domain.InsulinPreset.CUSTOM) settings.insulinPeakMinutes else preset.peakMinutes,
+                insulinOnsetMinutes = if (preset == dev.xdripyou.app.domain.InsulinPreset.CUSTOM) 15 else preset.onsetMinutes,
                 chartHeight = null,
                 modifier = Modifier.weight(1f),
             )

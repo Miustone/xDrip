@@ -51,6 +51,12 @@ class GlucoseForegroundService : Service() {
                 app.alertEngine.evaluatePeriodicChecks()
                 if (tickCount % 5 == 0) {
                     val settings = app.repository.settingsStore.current()
+                    if (settings.bleDeviceType != "none" &&
+                        settings.bleDeviceAddress.isNotBlank() &&
+                        !BleCollectorManager.status.value.connected
+                    ) {
+                        BleCollectorManager.connectToConfigured(app)
+                    }
                     val wifiOk = !settings.nightscoutWifiOnly || SystemPermissionsHelper.isOnWifi(this@GlucoseForegroundService)
                     if ((settings.nightscoutFollowEnabled || settings.nightscoutUploadEnabled) &&
                         settings.nightscoutUrl.isNotBlank() &&
@@ -91,6 +97,24 @@ class GlucoseForegroundService : Service() {
                     if (settings.peerSyncEnabled && settings.peerSyncHost.isNotBlank()) {
                         val beforeLatest = app.repository.getLatestReadings(1).firstOrNull()?.timestampMs ?: 0L
                         app.repository.syncPeerMaster()
+                        val afterLatest = app.repository.getLatestReadings(1).firstOrNull()
+                        if (afterLatest != null && afterLatest.timestampMs > beforeLatest) {
+                            app.alertEngine.refreshOngoingNotification()
+                            app.alertEngine.evaluateOnNewReading(afterLatest)
+                        }
+                    }
+                    if (settings.careLinkEnabled && settings.careLinkUsername.isNotBlank() && settings.careLinkPassword.isNotBlank()) {
+                        val beforeLatest = app.repository.getLatestReadings(1).firstOrNull()?.timestampMs ?: 0L
+                        app.repository.syncCareLink()
+                        val afterLatest = app.repository.getLatestReadings(1).firstOrNull()
+                        if (afterLatest != null && afterLatest.timestampMs > beforeLatest) {
+                            app.alertEngine.refreshOngoingNotification()
+                            app.alertEngine.evaluateOnNewReading(afterLatest)
+                        }
+                    }
+                    if (settings.webFollowEnabled && settings.webFollowUrl.isNotBlank()) {
+                        val beforeLatest = app.repository.getLatestReadings(1).firstOrNull()?.timestampMs ?: 0L
+                        app.repository.syncWebFollow()
                         val afterLatest = app.repository.getLatestReadings(1).firstOrNull()
                         if (afterLatest != null && afterLatest.timestampMs > beforeLatest) {
                             app.alertEngine.refreshOngoingNotification()
