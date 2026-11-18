@@ -22,10 +22,8 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.VolumeOff
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -71,6 +69,8 @@ fun AlertsScreen(
     onSetMissedReading: (Boolean, Int, Int) -> Unit,
     onSetRisingAlert: (Boolean, Double) -> Unit,
     onSetFallingAlert: (Boolean, Double) -> Unit,
+    onSetLowPrediction: (Boolean, Double, Int) -> Unit,
+    onSetPersistentHigh: (Boolean, Double, Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -107,7 +107,7 @@ fun AlertsScreen(
                 }
             }
 
-            // Global Silence / Snooze Controls (mirrors SnoozeActivity cleanly)
+            // Global Silence / Snooze Controls
             item {
                 val allRem = ((settings.alertsDisabledUntilMs - state.nowMs) / 60_000L).coerceAtLeast(0L)
                 val lowRem = ((settings.lowAlertsDisabledUntilMs - state.nowMs) / 60_000L).coerceAtLeast(0L)
@@ -127,22 +127,9 @@ fun AlertsScreen(
                                 fontWeight = FontWeight.Bold,
                             )
                         }
-
-                        SilenceRow(
-                            label = "Alle Alarme",
-                            remainingMins = allRem,
-                            onSilence = { mins -> onSilenceScope("all", mins) },
-                        )
-                        SilenceRow(
-                            label = "Nur Niedrig-Alarme",
-                            remainingMins = lowRem,
-                            onSilence = { mins -> onSilenceScope("low", mins) },
-                        )
-                        SilenceRow(
-                            label = "Nur Hoch-Alarme",
-                            remainingMins = highRem,
-                            onSilence = { mins -> onSilenceScope("high", mins) },
-                        )
+                        SilenceRow("Alle Alarme", allRem) { onSilenceScope("all", it) }
+                        SilenceRow("Nur Niedrig-Alarme", lowRem) { onSilenceScope("low", it) }
+                        SilenceRow("Nur Hoch-Alarme", highRem) { onSilenceScope("high", it) }
                     }
                 }
             }
@@ -256,7 +243,7 @@ fun AlertsScreen(
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 Text(
-                                    "Warnt nach ${settings.missedReadingMinutes} Min. ohne CamAPS-Wert",
+                                    "Warnt nach ${settings.missedReadingMinutes} Min. ohne neuen Wert",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = scheme.onSurfaceVariant,
                                 )
@@ -284,6 +271,99 @@ fun AlertsScreen(
                                 },
                                 valueRange = 10f..60f,
                                 steps = 9,
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Prediction & Persistent High Card
+            item {
+                Card(shape = RoundedCornerShape(24.dp)) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text(
+                            "Vorhersage & Anhaltend Hoch",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Niedrig-Vorhersage")
+                                Text(
+                                    "Warnt wenn in ≤ ${settings.lowPredictionHorizonMinutes} Min. unter ${GlucoseUnit.formatValue(settings.lowPredictionThresholdMgdl, settings.useMgdl)} ${GlucoseUnit.unitLabel(settings.useMgdl)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = scheme.onSurfaceVariant,
+                                )
+                            }
+                            Switch(
+                                checked = settings.lowPredictionEnabled,
+                                onCheckedChange = { enabled ->
+                                    onSetLowPrediction(
+                                        enabled,
+                                        settings.lowPredictionThresholdMgdl,
+                                        settings.lowPredictionHorizonMinutes,
+                                    )
+                                },
+                            )
+                        }
+                        if (settings.lowPredictionEnabled) {
+                            Slider(
+                                value = settings.lowPredictionHorizonMinutes.toFloat(),
+                                onValueChange = {
+                                    onSetLowPrediction(
+                                        true,
+                                        settings.lowPredictionThresholdMgdl,
+                                        it.roundToInt(),
+                                    )
+                                },
+                                valueRange = 10f..35f,
+                                steps = 4,
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Anhaltend Hoch")
+                                Text(
+                                    "Warnt nach ${settings.persistentHighMinutes} Min. über ${GlucoseUnit.formatValue(settings.persistentHighThresholdMgdl, settings.useMgdl)} ${GlucoseUnit.unitLabel(settings.useMgdl)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = scheme.onSurfaceVariant,
+                                )
+                            }
+                            Switch(
+                                checked = settings.persistentHighEnabled,
+                                onCheckedChange = { enabled ->
+                                    onSetPersistentHigh(
+                                        enabled,
+                                        settings.persistentHighThresholdMgdl,
+                                        settings.persistentHighMinutes,
+                                    )
+                                },
+                            )
+                        }
+                        if (settings.persistentHighEnabled) {
+                            Slider(
+                                value = settings.persistentHighMinutes.toFloat(),
+                                onValueChange = {
+                                    onSetPersistentHigh(
+                                        true,
+                                        settings.persistentHighThresholdMgdl,
+                                        it.roundToInt(),
+                                    )
+                                },
+                                valueRange = 30f..180f,
+                                steps = 4,
                             )
                         }
                     }

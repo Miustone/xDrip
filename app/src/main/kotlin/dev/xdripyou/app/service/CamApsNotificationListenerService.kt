@@ -112,6 +112,9 @@ class CamApsNotificationListenerService : NotificationListenerService() {
                 )
                 app.alertEngine.refreshOngoingNotification()
                 app.alertEngine.evaluateOnNewReading(outcome.reading)
+                if (repo.settingsStore.current().nightscoutUploadEnabled) {
+                    repo.syncNightscout()
+                }
             }
             is InsertOutcome.Deduplicated -> {
                 repo.recordCollectorEvent(

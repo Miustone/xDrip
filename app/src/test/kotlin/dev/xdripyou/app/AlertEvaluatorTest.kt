@@ -104,4 +104,38 @@ class AlertEvaluatorTest {
         assertTrue(AlertEvaluator.isRapidRateTriggered(rapidDrop, rateMgdlPerMin = 3.0, drop = true, nowMs = now))
         assertFalse(AlertEvaluator.isRapidRateTriggered(rapidDrop, rateMgdlPerMin = 3.0, drop = false, nowMs = now))
     }
+
+    @Test
+    fun `detects persistent high only when continuously above threshold`() {
+        val now = 1_700_000_000_000L
+        val continuousHigh = (0..12).map { idx ->
+            GlucoseReading(
+                timestampMs = now - idx * 300_000L,
+                mgdl = 205.0,
+                slopePerMin = 0.0,
+                trend = TrendArrow.FLAT,
+                source = "Test",
+            )
+        }
+        assertTrue(
+            AlertEvaluator.isPersistentHighTriggered(
+                readingsDesc = continuousHigh,
+                thresholdMgdl = 180.0,
+                durationMinutes = 60,
+                nowMs = now,
+            )
+        )
+
+        val interrupted = continuousHigh.toMutableList().apply {
+            this[5] = this[5].copy(mgdl = 165.0)
+        }
+        assertFalse(
+            AlertEvaluator.isPersistentHighTriggered(
+                readingsDesc = interrupted,
+                thresholdMgdl = 180.0,
+                durationMinutes = 60,
+                nowMs = now,
+            )
+        )
+    }
 }

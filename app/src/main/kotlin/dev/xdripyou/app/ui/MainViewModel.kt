@@ -13,11 +13,14 @@ import dev.xdripyou.app.domain.AppSettings
 import dev.xdripyou.app.domain.CamApsParser
 import dev.xdripyou.app.domain.ChartWindow
 import dev.xdripyou.app.domain.CollectorEvent
+import dev.xdripyou.app.domain.GlucosePredictor
 import dev.xdripyou.app.domain.GlucoseReading
 import dev.xdripyou.app.domain.GlucoseStats
 import dev.xdripyou.app.domain.PermissionStatus
+import dev.xdripyou.app.domain.PredictionPoint
 import dev.xdripyou.app.domain.SourceUnitMode
 import dev.xdripyou.app.domain.ThemeModeOption
+import dev.xdripyou.app.domain.TreatmentEntry
 import dev.xdripyou.app.service.GlucoseForegroundService
 import dev.xdripyou.app.service.SystemPermissionsHelper
 import kotlinx.coroutines.delay
@@ -32,6 +35,7 @@ import kotlinx.coroutines.launch
 data class MainUiState(
     val settings: AppSettings = AppSettings(),
     val readings24h: List<GlucoseReading> = emptyList(),
+    val treatments24h: List<TreatmentEntry> = emptyList(),
     val alertRules: List<AlertRule> = emptyList(),
     val activeAlert: ActiveAlertState? = null,
     val collectorEvents: List<CollectorEvent> = emptyList(),
@@ -50,10 +54,23 @@ data class MainUiState(
             return current.mgdl - prev.mgdl
         }
 
+    val predictions: List<PredictionPoint>
+        get() = if (settings.predictionCurveEnabled) {
+            GlucosePredictor.predict(readings24h, nowMs)
+        } else {
+            emptyList()
+        }
+
     val readingsInWindow: List<GlucoseReading>
         get() {
             val cutoff = nowMs - chartWindow.durationMs
             return readings24h.filter { it.timestampMs >= cutoff }
+        }
+
+    val treatmentsInWindow: List<TreatmentEntry>
+        get() {
+            val cutoff = nowMs - chartWindow.durationMs
+            return treatments24h.filter { it.timestampMs >= cutoff }
         }
 
     val windowStats: GlucoseStats
@@ -83,28 +100,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val since24h = System.currentTimeMillis() - 24 * 3_600_000L
 
-    private val coreDataFlow = combine(
+    private val primaryDataFlow = combine(
         settingsStore.settingsFlow,
         repo.observeReadingsSince(since24h, limit = 600),
+        repo.observeTreatmentsSince(since24h, limit = 300),
         repo.observeAlertRules(),
         repo.observeActiveAlert(),
-        repo.observeCollectorEvents(limit = 50),
-    ) { settings, readings, rules, activeAlert, events ->
-        CoreBundle(settings, readings, rules, activeAlert, events)
+    ) { settings, readings, treatments, rules, activeAlert ->
+        PrimaryBundle(settings, readings, treatments, rules, activeAlert)
     }
 
     val uiState: StateFlow<MainUiState> = combine(
-        coreDataFlow,
+        primaryDataFlow,
+        repo.observeCollectorEvents(limit = 50),
         chartWindowFlow,
         permissionsFlow,
         nowMsFlow,
-    ) { core, window, perms, nowMs ->
+    ) { primary, events, window, perms, nowMs ->
         MainUiState(
-            settings = core.settings,
-            readings24h = core.readings,
-            alertRules = core.rules,
-            activeAlert = core.activeAlert,
-            collectorEvents = core.events,
+            settings = primary.settings,
+            readings24h = primary.readings,
+            treatments24h = primary.treatments,
+            alertRules = primary.rules,
+            activeAlert = primary.activeAlert,
+            collectorEvents = events,
             chartWindow = window,
             permissions = perms,
             nowMs = nowMs,
@@ -147,6 +166,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 it[SettingsStore.Keys.TARGET_LOW] = lowMgdl
                 it[SettingsStore.Keys.TARGET_HIGH] = highMgdl
             }
+        }
+    }
+
+    fun setPredictionCurveEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.PREDICTION_CURVE] = enabled }
+        }
+    }
+
+    fun setLocalBroadcastEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.LOCAL_BROADCAST] = enabled }
         }
     }
 
@@ -241,6 +272,64 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 it[SettingsStore.Keys.FALLING_RATE] = rateMgdlPerMin.coerceIn(1.0, 6.0)
             }
         }
+    }
+
+    fun setLowPrediction(enabled: Boolean, thresholdMgdl: Double, horizonMinutes: Int) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.LOW_PRED_ENABLED] = enabled
+                it[SettingsStore.Keys.LOW_PRED_THRESHOLD] = thresholdMgdl.coerceIn(50.0, 110.0)
+                it[SettingsStore.Keys.LOW_PRED_HORIZON] = horizonMinutes.coerceIn(10, 45)
+            }
+        }
+    }
+
+    fun setPersistentHigh(enabled: Boolean, thresholdMgdl: Double, durationMinutes: Int) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.PERSISTENT_HIGH_ENABLED] = enabled
+                it[SettingsStore.Keys.PERSISTENT_HIGH_THRESHOLD] = thresholdMgdl.coerceIn(140.0, 300.0)
+                it[SettingsStore.Keys.PERSISTENT_HIGH_MINUTES] = durationMinutes.coerceIn(20, 240)
+            }
+        }
+    }
+
+    fun setNightscoutConfig(
+        url: String,
+        apiSecret: String,
+        followEnabled: Boolean,
+        uploadEnabled: Boolean,
+    ) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.NS_URL] = url.trim()
+                it[SettingsStore.Keys.NS_API_SECRET] = apiSecret.trim()
+                it[SettingsStore.Keys.NS_FOLLOW_ENABLED] = followEnabled
+                it[SettingsStore.Keys.NS_UPLOAD_ENABLED] = uploadEnabled
+            }
+        }
+    }
+
+    fun syncNightscoutNow(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val res = repo.syncNightscout()
+            nowMsFlow.value = System.currentTimeMillis()
+            alertEngine.refreshOngoingNotification()
+            onResult(res.getOrElse { "Fehler: ${it.message}" })
+        }
+    }
+
+    fun addTreatment(entry: TreatmentEntry) {
+        viewModelScope.launch {
+            repo.addOrUpdateTreatment(entry)
+            if (settingsStore.current().nightscoutUploadEnabled) {
+                repo.syncNightscout()
+            }
+        }
+    }
+
+    fun deleteTreatment(id: Long) {
+        viewModelScope.launch { repo.deleteTreatment(id) }
     }
 
     fun silenceAlerts(scope: String, minutes: Int) {
@@ -358,11 +447,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private data class CoreBundle(
+    suspend fun exportBackupJson(): String = repo.exportBackupJson()
+
+    fun importBackupJson(jsonText: String, onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val res = runCatching { repo.importBackupJson(jsonText) }
+            nowMsFlow.value = System.currentTimeMillis()
+            alertEngine.refreshOngoingNotification()
+            onResult(res.getOrElse { "Import-Fehler: ${it.message}" })
+        }
+    }
+
+    private data class PrimaryBundle(
         val settings: AppSettings,
         val readings: List<GlucoseReading>,
+        val treatments: List<TreatmentEntry>,
         val rules: List<AlertRule>,
         val activeAlert: ActiveAlertState?,
-        val events: List<CollectorEvent>,
     )
 }

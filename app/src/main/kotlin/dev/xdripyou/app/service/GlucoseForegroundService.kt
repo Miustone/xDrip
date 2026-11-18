@@ -20,6 +20,7 @@ class GlucoseForegroundService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var tickerJob: Job? = null
+    private var tickCount = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -45,7 +46,22 @@ class GlucoseForegroundService : Service() {
         tickerJob = serviceScope.launch {
             while (isActive) {
                 delay(60_000L)
+                tickCount++
                 app.alertEngine.evaluatePeriodicChecks()
+                if (tickCount % 5 == 0) {
+                    val settings = app.repository.settingsStore.current()
+                    if ((settings.nightscoutFollowEnabled || settings.nightscoutUploadEnabled) &&
+                        settings.nightscoutUrl.isNotBlank()
+                    ) {
+                        val beforeLatest = app.repository.getLatestReadings(1).firstOrNull()?.timestampMs ?: 0L
+                        app.repository.syncNightscout()
+                        val afterLatest = app.repository.getLatestReadings(1).firstOrNull()
+                        if (afterLatest != null && afterLatest.timestampMs > beforeLatest) {
+                            app.alertEngine.refreshOngoingNotification()
+                            app.alertEngine.evaluateOnNewReading(afterLatest)
+                        }
+                    }
+                }
             }
         }
         return START_STICKY

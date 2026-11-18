@@ -41,6 +41,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.xdripyou.app.domain.GlucoseReading
 import dev.xdripyou.app.domain.GlucoseUnit
+import dev.xdripyou.app.domain.PredictionPoint
+import dev.xdripyou.app.domain.TreatmentEntry
 import dev.xdripyou.app.ui.theme.LocalGlucoseColors
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -52,6 +54,8 @@ import kotlin.math.max
 @Composable
 fun GlucoseChart(
     readings: List<GlucoseReading>,
+    treatments: List<TreatmentEntry> = emptyList(),
+    predictions: List<PredictionPoint> = emptyList(),
     windowMs: Long,
     nowMs: Long,
     useMgdl: Boolean,
@@ -63,19 +67,23 @@ fun GlucoseChart(
     val glucoseColors = LocalGlucoseColors.current
     var selected by remember { mutableStateOf<GlucoseReading?>(null) }
 
+    val futureHorizonMs = if (predictions.isNotEmpty()) 30 * 60_000L else 0L
+    val startMs = nowMs - windowMs
+    val endMs = nowMs + futureHorizonMs
+    val totalSpanMs = (endMs - startMs).coerceAtLeast(1L)
+
     val density = LocalDensity.current
     val leftPadPx = with(density) { 42.dp.toPx() }
     val rightPadPx = with(density) { 12.dp.toPx() }
     val topPadPx = with(density) { 10.dp.toPx() }
-    val bottomPadPx = with(density) { 24.dp.toPx() }
+    val bottomPadPx = with(density) { 26.dp.toPx() }
     val labelTextSizePx = with(density) { 10.5f * density.density }
 
     fun pickNearest(touchX: Float, widthPx: Float) {
         if (readings.isEmpty()) return
         val chartW = (widthPx - leftPadPx - rightPadPx).coerceAtLeast(1f)
         val fraction = ((touchX - leftPadPx) / chartW).coerceIn(0f, 1f)
-        val startMs = nowMs - windowMs
-        val targetMs = startMs + (fraction * windowMs).toLong()
+        val targetMs = startMs + (fraction * totalSpanMs).toLong()
         selected = readings.minByOrNull { abs(it.timestampMs - targetMs) }
     }
 
@@ -118,10 +126,13 @@ fun GlucoseChart(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    LegendDot(glucoseColors.inRange, "Im Ziel")
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LegendDot(glucoseColors.inRange, "Ziel")
                     LegendDot(glucoseColors.low, "Niedrig")
                     LegendDot(glucoseColors.high, "Hoch")
+                    if (predictions.isNotEmpty()) {
+                        LegendDot(scheme.tertiary, "Trend")
+                    }
                 }
                 Text(
                     text = "Tippen / Ziehen",
@@ -136,13 +147,13 @@ fun GlucoseChart(
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(220.dp)
-                .pointerInput(readings, nowMs, windowMs) {
+                .height(230.dp)
+                .pointerInput(readings, nowMs, windowMs, futureHorizonMs) {
                     detectTapGestures { offset ->
                         pickNearest(offset.x, size.width.toFloat())
                     }
                 }
-                .pointerInput(readings, nowMs, windowMs) {
+                .pointerInput(readings, nowMs, windowMs, futureHorizonMs) {
                     detectDragGestures(
                         onDragStart = { offset -> pickNearest(offset.x, size.width.toFloat()) },
                         onDrag = { change, _ -> pickNearest(change.position.x, size.width.toFloat()) },
@@ -159,12 +170,14 @@ fun GlucoseChart(
             val chartH = chartBottom - chartTop
 
             val minY = 40.0
-            val maxObserved = readings.maxOfOrNull { it.mgdl } ?: 220.0
+            val maxObserved = max(
+                readings.maxOfOrNull { it.mgdl } ?: 220.0,
+                predictions.maxOfOrNull { it.mgdl } ?: 220.0,
+            )
             val maxY = max(240.0, (ceil(maxObserved / 40.0) * 40.0).coerceIn(240.0, 400.0))
-            val startMs = nowMs - windowMs
 
             fun xForMs(ms: Long): Float {
-                val t = ((ms - startMs).toDouble() / windowMs.toDouble()).coerceIn(0.0, 1.0)
+                val t = ((ms - startMs).toDouble() / totalSpanMs.toDouble()).coerceIn(0.0, 1.0)
                 return (chartLeft + t * chartW).toFloat()
             }
 
@@ -183,7 +196,19 @@ fun GlucoseChart(
                 size = androidx.compose.ui.geometry.Size(chartW, lowY - highY),
             )
 
-            // 2. Grid lines + Y labels
+            // 2. "Now" vertical marker when prediction horizon is shown
+            if (futureHorizonMs > 0L) {
+                val nowX = xForMs(nowMs)
+                drawLine(
+                    color = scheme.outlineVariant.copy(alpha = 0.55f),
+                    start = Offset(nowX, chartTop),
+                    end = Offset(nowX, chartBottom),
+                    strokeWidth = 1.5f,
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f),
+                )
+            }
+
+            // 3. Grid lines + Y labels
             val labelPaint = Paint().apply {
                 color = scheme.onSurfaceVariant.toArgb()
                 textSize = labelTextSizePx
@@ -196,7 +221,7 @@ fun GlucoseChart(
                 add(maxY)
             }
             for (tick in ticks) {
-                if (tick < minY || tick > maxY) continue
+                if (tick < minY || tick > maxY) continue;
                 val y = yForMgdl(tick)
                 val isThreshold = tick == targetLowMgdl || tick == targetHighMgdl
                 if (isThreshold) {
@@ -224,7 +249,7 @@ fun GlucoseChart(
                 )
             }
 
-            // 3. Time axis labels
+            // 4. Time axis labels
             val xLabelPaint = Paint().apply {
                 color = scheme.onSurfaceVariant.toArgb()
                 textSize = labelTextSizePx
@@ -233,8 +258,8 @@ fun GlucoseChart(
             val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
             for (i in 0..4) {
                 val frac = i / 4.0
-                val ms = startMs + (windowMs * frac).toLong()
-                val text = if (i == 4) "Jetzt" else timeFmt.format(Date(ms))
+                val ms = startMs + (totalSpanMs * frac).toLong()
+                val text = if (i == 4 && futureHorizonMs == 0L) "Jetzt" else timeFmt.format(Date(ms))
                 xLabelPaint.textAlign = when (i) {
                     0 -> Paint.Align.LEFT
                     4 -> Paint.Align.RIGHT
@@ -265,7 +290,42 @@ fun GlucoseChart(
                 return@Canvas
             }
 
-            // 4. Curve + points (chronological)
+            // 5. Treatment markers along bottom of chart
+            val treatLabelPaint = Paint().apply {
+                color = scheme.primary.toArgb()
+                textSize = labelTextSizePx * 0.9f
+                isAntiAlias = true
+                textAlign = Paint.Align.CENTER
+                isFakeBoldText = true
+            }
+            for (t in treatments) {
+                if (t.timestampMs < startMs || t.timestampMs > endMs) continue
+                val tx = xForMs(t.timestampMs)
+                val markerY = chartBottom - 16f
+                if (t.hasInsulin) {
+                    drawCircle(color = scheme.primary, radius = 8f, center = Offset(tx, markerY))
+                    treatLabelPaint.color = scheme.primary.toArgb()
+                    drawContext.canvas.nativeCanvas.drawText(
+                        "${String.format(Locale.US, "%.1f", t.insulinUnits)}E",
+                        tx,
+                        markerY - 12f,
+                        treatLabelPaint,
+                    )
+                }
+                if (t.hasCarbs) {
+                    val cy = if (t.hasInsulin) markerY - 28f else markerY
+                    drawCircle(color = glucoseColors.high, radius = 8f, center = Offset(tx, cy))
+                    treatLabelPaint.color = glucoseColors.high.toArgb()
+                    drawContext.canvas.nativeCanvas.drawText(
+                        "${t.carbsGrams.toInt()}g",
+                        tx,
+                        cy - 12f,
+                        treatLabelPaint,
+                    )
+                }
+            }
+
+            // 6. Curve + points (chronological)
             val sorted = readings.asReversed()
             val path = Path()
             var started = false
@@ -273,10 +333,10 @@ fun GlucoseChart(
                 val r = sorted[i]
                 val pt = Offset(xForMs(r.timestampMs), yForMgdl(r.mgdl))
                 if (!started || (i > 0 && r.timestampMs - sorted[i - 1].timestampMs > 1_200_000L)) {
-                    path.moveTo(pt.dx, pt.dy)
+                    path.moveTo(pt.x, pt.y)
                     started = true
                 } else {
-                    path.lineTo(pt.dx, pt.dy)
+                    path.lineTo(pt.x, pt.y)
                 }
             }
             drawPath(
@@ -284,6 +344,33 @@ fun GlucoseChart(
                 color = scheme.primary.copy(alpha = 0.55f),
                 style = Stroke(width = 4.5f, cap = StrokeCap.Round),
             )
+
+            // 7. Prediction dashed curve
+            if (predictions.isNotEmpty() && sorted.isNotEmpty()) {
+                val last = sorted.last()
+                val predPath = Path().apply {
+                    moveTo(xForMs(last.timestampMs), yForMgdl(last.mgdl))
+                    for (p in predictions) {
+                        lineTo(xForMs(p.timestampMs), yForMgdl(p.mgdl))
+                    }
+                }
+                drawPath(
+                    path = predPath,
+                    color = scheme.tertiary.copy(alpha = 0.75f),
+                    style = Stroke(
+                        width = 4f,
+                        cap = StrokeCap.Round,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f), 0f),
+                    ),
+                )
+                for (p in predictions) {
+                    drawCircle(
+                        color = scheme.tertiary.copy(alpha = 0.7f),
+                        radius = 4.5f,
+                        center = Offset(xForMs(p.timestampMs), yForMgdl(p.mgdl)),
+                    )
+                }
+            }
 
             val dotRadius = if (sorted.size > 100) 5.5f else 7.5f
             for (r in sorted) {
@@ -296,8 +383,8 @@ fun GlucoseChart(
                 val pt = Offset(xForMs(sel.timestampMs), yForMgdl(sel.mgdl))
                 drawLine(
                     color = scheme.primary.copy(alpha = 0.5f),
-                    start = Offset(pt.dx, chartTop),
-                    end = Offset(pt.dx, chartBottom),
+                    start = Offset(pt.x, chartTop),
+                    end = Offset(pt.x, chartBottom),
                     strokeWidth = 2.5f,
                 )
                 drawCircle(color = scheme.surface, radius = 14f, center = pt)
@@ -328,6 +415,3 @@ private fun LegendDot(color: Color, label: String) {
         )
     }
 }
-
-private val Offset.dx: Float get() = x
-private val Offset.dy: Float get() = y

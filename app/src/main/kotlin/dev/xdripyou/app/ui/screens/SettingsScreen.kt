@@ -18,12 +18,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Science
+import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -45,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.xdripyou.app.domain.CamApsParser
 import dev.xdripyou.app.domain.GlucoseUnit
@@ -70,12 +73,18 @@ fun SettingsScreen(
     onSetSourceUnitMode: (SourceUnitMode) -> Unit,
     onSetJamProtection: (Boolean) -> Unit,
     onSetCustomPackages: (String) -> Unit,
+    onSetNightscoutConfig: (String, String, Boolean, Boolean) -> Unit,
+    onSyncNightscoutNow: ((String) -> Unit) -> Unit,
+    onSetLocalBroadcastEnabled: (Boolean) -> Unit,
+    onExportBackup: () -> Unit,
+    onImportBackup: () -> Unit,
     onSimulateNotification: (String, (String) -> Unit) -> Unit,
     onInjectManualReading: (Double) -> Unit,
     onSeedDemo: () -> Unit,
     onClearAllReadings: () -> Unit,
     onSetUseMgdl: (Boolean) -> Unit,
     onSetTargetRange: (Double, Double) -> Unit,
+    onSetPredictionCurve: (Boolean) -> Unit,
     onSetDynamicColor: (Boolean) -> Unit,
     onSetThemeMode: (ThemeModeOption) -> Unit,
     modifier: Modifier = Modifier,
@@ -86,6 +95,9 @@ fun SettingsScreen(
     var manualText by remember { mutableStateOf("105") }
     var simFeedback by remember { mutableStateOf<String?>(null) }
     var customPkgsText by remember(settings.customPackages) { mutableStateOf(settings.customPackages) }
+    var nsUrlText by remember(settings.nightscoutUrl) { mutableStateOf(settings.nightscoutUrl) }
+    var nsSecretText by remember(settings.nightscoutApiSecret) { mutableStateOf(settings.nightscoutApiSecret) }
+    var nsFeedback by remember { mutableStateOf<String?>(null) }
     val timeFmt = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
 
     LazyColumn(
@@ -150,7 +162,7 @@ fun SettingsScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Dauerhafte Status-Benachrichtigung")
                             Text(
-                                "Hält Hintergrund-Überwachung & verpasste-Werte-Timer aktiv",
+                                "Hält Hintergrund-Überwachung & Timer aktiv",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = scheme.onSurfaceVariant,
                             )
@@ -206,7 +218,7 @@ fun SettingsScreen(
                         OutlinedTextField(
                             value = customPkgsText,
                             onValueChange = { customPkgsText = it },
-                            label = { Text("Zusätzliche Package-IDs (kommagetrennt)") },
+                            label = { Text("Zusätzliche Package-IDs") },
                             singleLine = true,
                             modifier = Modifier.weight(1f),
                         )
@@ -218,7 +230,158 @@ fun SettingsScreen(
             }
         }
 
-        // 2. Display & Material 3 You
+        // 2. Nightscout Follower & Upload
+        item {
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.CloudSync, null, tint = scheme.primary)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Nightscout (Follower & Upload)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    OutlinedTextField(
+                        value = nsUrlText,
+                        onValueChange = { nsUrlText = it },
+                        label = { Text("Nightscout-URL (z. B. https://dein.ns.site)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = nsSecretText,
+                        onValueChange = { nsSecretText = it },
+                        label = { Text("API-Secret (wird SHA-1 gehasht)") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Als Follower abrufen (alle 5 Min.)")
+                        Switch(
+                            checked = settings.nightscoutFollowEnabled,
+                            onCheckedChange = { follow ->
+                                onSetNightscoutConfig(
+                                    nsUrlText,
+                                    nsSecretText,
+                                    follow,
+                                    settings.nightscoutUploadEnabled,
+                                )
+                            },
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Werte & Einträge hochladen")
+                        Switch(
+                            checked = settings.nightscoutUploadEnabled,
+                            onCheckedChange = { upload ->
+                                onSetNightscoutConfig(
+                                    nsUrlText,
+                                    nsSecretText,
+                                    settings.nightscoutFollowEnabled,
+                                    upload,
+                                )
+                            },
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                onSetNightscoutConfig(
+                                    nsUrlText,
+                                    nsSecretText,
+                                    settings.nightscoutFollowEnabled,
+                                    settings.nightscoutUploadEnabled,
+                                )
+                                nsFeedback = "Konfiguration gespeichert"
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Speichern") }
+                        Button(
+                            onClick = {
+                                onSetNightscoutConfig(
+                                    nsUrlText,
+                                    nsSecretText,
+                                    settings.nightscoutFollowEnabled,
+                                    settings.nightscoutUploadEnabled,
+                                )
+                                onSyncNightscoutNow { res -> nsFeedback = res }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Jetzt syncen") }
+                    }
+                    nsFeedback?.let { msg ->
+                        Text(msg, style = MaterialTheme.typography.labelMedium, color = scheme.primary)
+                    }
+                }
+            }
+        }
+
+        // 3. Inter-App Integration, Widget & Backup
+        item {
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        "Integration & Backup",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Lokaler xDrip-Broadcast (AAPS / Watches)")
+                            Text(
+                                "Sendet com.eveningoutpost.dexdrip.BgEstimate bei neuen Werten",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = scheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = settings.localBroadcastEnabled,
+                            onCheckedChange = onSetLocalBroadcastEnabled,
+                        )
+                    }
+                    Text(
+                        "Tipp: Das Material-You-Widget „xDrip 2 You · Blutzucker“ kannst du direkt auf deinem Pixel-Startbildschirm hinzufügen.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = onExportBackup, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Rounded.Upload, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("JSON Export")
+                        }
+                        OutlinedButton(onClick = onImportBackup, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Rounded.Download, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("JSON Import")
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Display & Material 3 You
         item {
             Card(shape = RoundedCornerShape(24.dp)) {
                 Column(
@@ -266,6 +429,25 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
+                            Text("30-Min. Vorhersage-Kurve im Chart")
+                            Text(
+                                "Zeigt gestrichelte Trend-Prognose",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = scheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = settings.predictionCurveEnabled,
+                            onCheckedChange = onSetPredictionCurve,
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text("Material You (Dynamische Farben)")
                             Text(
                                 "Passt Farben automatisch ans Pixel-Wallpaper an",
@@ -292,7 +474,7 @@ fun SettingsScreen(
             }
         }
 
-        // 3. Test & Diagnostics Lab
+        // 5. Test & Diagnostics Lab
         item {
             Card(shape = RoundedCornerShape(24.dp)) {
                 Column(
@@ -317,7 +499,7 @@ fun SettingsScreen(
                         OutlinedTextField(
                             value = simText,
                             onValueChange = { simText = it },
-                            label = { Text("CamAPS-Text simulieren (z. B. 5,8 mmol/L)") },
+                            label = { Text("CamAPS-Text simulieren") },
                             singleLine = true,
                             modifier = Modifier.weight(1f),
                         )

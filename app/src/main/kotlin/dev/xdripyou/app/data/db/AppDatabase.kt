@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -12,15 +13,17 @@ import kotlinx.coroutines.launch
 @Database(
     entities = [
         BgReadingEntity::class,
+        TreatmentEntity::class,
         AlertRuleEntity::class,
         ActiveAlertEntity::class,
         CollectorEventEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun bgReadingDao(): BgReadingDao
+    abstract fun treatmentDao(): TreatmentDao
     abstract fun alertRuleDao(): AlertRuleDao
     abstract fun activeAlertDao(): ActiveAlertDao
     abstract fun collectorEventDao(): CollectorEventDao
@@ -28,6 +31,27 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         @Volatile
         private var instance: AppDatabase? = null
+
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE bg_readings ADD COLUMN syncedNightscout INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS treatments (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        timestampMs INTEGER NOT NULL,
+                        insulinUnits REAL NOT NULL,
+                        carbsGrams REAL NOT NULL,
+                        bloodGlucoseMgdl REAL,
+                        note TEXT NOT NULL,
+                        eventType TEXT NOT NULL,
+                        syncedNightscout INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_treatments_timestampMs ON treatments(timestampMs)")
+            }
+        }
 
         fun get(context: Context): AppDatabase {
             return instance ?: synchronized(this) {
@@ -38,6 +62,7 @@ abstract class AppDatabase : RoomDatabase() {
         private fun buildDatabase(context: Context): AppDatabase {
             lateinit var db: AppDatabase
             db = Room.databaseBuilder(context, AppDatabase::class.java, "xdrip_you.db")
+                .addMigrations(MIGRATION_1_2)
                 .addCallback(object : Callback() {
                     override fun onCreate(sqliteDb: SupportSQLiteDatabase) {
                         super.onCreate(sqliteDb)

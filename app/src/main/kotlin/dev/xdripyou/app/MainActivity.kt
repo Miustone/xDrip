@@ -3,6 +3,7 @@ package dev.xdripyou.app
 import android.Manifest
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -16,7 +17,9 @@ import dev.xdripyou.app.service.SystemPermissionsHelper
 import dev.xdripyou.app.ui.MainViewModel
 import dev.xdripyou.app.ui.XdripYouRoot
 import dev.xdripyou.app.ui.theme.XdripYouTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
@@ -27,6 +30,33 @@ class MainActivity : ComponentActivity() {
             viewModel.refreshPermissions()
             if (granted) {
                 startForegroundIfEnabled()
+            }
+        }
+
+    private val exportBackupLauncher =
+        registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+            if (uri == null) return@registerForActivityResult
+            lifecycleScope.launch {
+                val json = viewModel.exportBackupJson()
+                withContext(Dispatchers.IO) {
+                    contentResolver.openOutputStream(uri)?.use { out ->
+                        out.write(json.toByteArray(Charsets.UTF_8))
+                    }
+                }
+                Toast.makeText(this@MainActivity, "xDrip 2 You Backup gespeichert", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+    private val importBackupLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@registerForActivityResult
+            lifecycleScope.launch {
+                val text = withContext(Dispatchers.IO) {
+                    contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                } ?: return@launch
+                viewModel.importBackupJson(text) { msg ->
+                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                }
             }
         }
 
@@ -57,6 +87,12 @@ class MainActivity : ComponentActivity() {
                     },
                     onOpenDndPolicy = {
                         SystemPermissionsHelper.openDndPolicySettings(this)
+                    },
+                    onExportBackup = {
+                        exportBackupLauncher.launch("xdrip2you-backup.json")
+                    },
+                    onImportBackup = {
+                        importBackupLauncher.launch(arrayOf("application/json", "*/*"))
                     },
                 )
             }

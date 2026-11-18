@@ -4,7 +4,7 @@ import java.util.Calendar
 
 /**
  * Pure Kotlin alert evaluation mirroring xDrip's `AlertType`, `ActiveBgAlert`,
- * and `BgReading` alarm logic.
+ * `PersistentHigh`, and `BgReading` alarm logic.
  */
 object AlertEvaluator {
 
@@ -30,7 +30,6 @@ object AlertEvaluator {
         }
         val eligible = rules.filter { it.enabled && isInTimeFrame(it, nowMs) }
 
-        // Low alerts take precedence over high alerts (lowest threshold first)
         if (settings.lowAlertsDisabledUntilMs <= nowMs) {
             val lowMatch = eligible
                 .filter { !it.isHigh && mgdl <= it.thresholdMgdl }
@@ -38,7 +37,6 @@ object AlertEvaluator {
             if (lowMatch != null) return lowMatch
         }
 
-        // High alerts checked descending (highest threshold first)
         if (settings.highAlertsDisabledUntilMs <= nowMs) {
             val highMatch = eligible
                 .filter { it.isHigh && mgdl >= it.thresholdMgdl }
@@ -100,5 +98,28 @@ object AlertEvaluator {
         var diff1 = p1.mgdl - p0.mgdl
         if (!drop) diff1 *= -1.0
         return diff1 >= (time1 * rateMgdlPerMin) / 2.0
+    }
+
+    /**
+     * Checks whether readings have remained continuously above `thresholdMgdl`
+     * for at least `durationMinutes` (mirrors xDrip `PersistentHigh`).
+     */
+    fun isPersistentHighTriggered(
+        readingsDesc: List<GlucoseReading>,
+        thresholdMgdl: Double,
+        durationMinutes: Int,
+        nowMs: Long,
+    ): Boolean {
+        val latest = readingsDesc.firstOrNull() ?: return false
+        if (nowMs - latest.timestampMs > 600_000L) return false
+        if (latest.mgdl <= thresholdMgdl) return false
+
+        val requiredStartMs = nowMs - durationMinutes * 60_000L
+        val windowReadings = readingsDesc.filter { it.timestampMs >= requiredStartMs }
+        if (windowReadings.size < 3) return false
+        val oldestInWindow = windowReadings.last()
+        val coveredMinutes = (latest.timestampMs - oldestInWindow.timestampMs) / 60_000L
+        if (coveredMinutes < (durationMinutes * 0.8).toLong()) return false
+        return windowReadings.all { it.mgdl > thresholdMgdl }
     }
 }

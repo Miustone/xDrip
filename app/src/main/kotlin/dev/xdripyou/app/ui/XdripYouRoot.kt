@@ -6,17 +6,20 @@ import androidx.compose.material.icons.automirrored.rounded.ShowChart
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Sensors
-import androidx.compose.material.icons.rounded.ShowChart
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -25,6 +28,7 @@ import dev.xdripyou.app.ui.screens.AlertsScreen
 import dev.xdripyou.app.ui.screens.HistoryScreen
 import dev.xdripyou.app.ui.screens.OverviewScreen
 import dev.xdripyou.app.ui.screens.SettingsScreen
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,12 +39,17 @@ fun XdripYouRoot(
     onRequestPostNotifications: () -> Unit,
     onRequestBatteryExemption: () -> Unit,
     onOpenDndPolicy: () -> Unit,
+    onExportBackup: () -> Unit,
+    onImportBackup: () -> Unit,
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
-    val titles = listOf("xDrip You", "Alarme", "Verlauf", "Quelle & Setup")
+    val titles = listOf("xDrip 2 You", "Alarme", "Verlauf", "Quelle & Setup")
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -87,6 +96,7 @@ fun XdripYouRoot(
                 onSelectWindow = viewModel::selectWindow,
                 onSnoozeAlert = viewModel::snoozeActiveAlert,
                 onStopAlert = viewModel::stopActiveAlert,
+                onAddTreatment = viewModel::addTreatment,
                 onOpenNotificationListener = onOpenNotificationListener,
                 onRequestPostNotifications = onRequestPostNotifications,
                 onRequestBatteryExemption = onRequestBatteryExemption,
@@ -108,10 +118,14 @@ fun XdripYouRoot(
                 onSetMissedReading = viewModel::setMissedReading,
                 onSetRisingAlert = viewModel::setRisingAlert,
                 onSetFallingAlert = viewModel::setFallingAlert,
+                onSetLowPrediction = viewModel::setLowPrediction,
+                onSetPersistentHigh = viewModel::setPersistentHigh,
                 modifier = mod,
             )
             2 -> HistoryScreen(
                 state = state,
+                onAddTreatment = viewModel::addTreatment,
+                onDeleteTreatment = viewModel::deleteTreatment,
                 modifier = mod,
             )
             else -> SettingsScreen(
@@ -125,12 +139,23 @@ fun XdripYouRoot(
                 onSetSourceUnitMode = viewModel::setSourceUnitMode,
                 onSetJamProtection = viewModel::setJamProtection,
                 onSetCustomPackages = viewModel::setCustomPackages,
+                onSetNightscoutConfig = viewModel::setNightscoutConfig,
+                onSyncNightscoutNow = { cb ->
+                    viewModel.syncNightscoutNow { msg ->
+                        cb(msg)
+                        scope.launch { snackbarHostState.showSnackbar(msg) }
+                    }
+                },
+                onSetLocalBroadcastEnabled = viewModel::setLocalBroadcastEnabled,
+                onExportBackup = onExportBackup,
+                onImportBackup = onImportBackup,
                 onSimulateNotification = viewModel::simulateCamApsNotification,
                 onInjectManualReading = viewModel::injectManualReading,
                 onSeedDemo = viewModel::seedDemoCurve,
                 onClearAllReadings = viewModel::clearAllReadings,
                 onSetUseMgdl = viewModel::setUseMgdl,
                 onSetTargetRange = viewModel::setTargetRange,
+                onSetPredictionCurve = viewModel::setPredictionCurveEnabled,
                 onSetDynamicColor = viewModel::setDynamicColor,
                 onSetThemeMode = viewModel::setThemeMode,
                 modifier = mod,

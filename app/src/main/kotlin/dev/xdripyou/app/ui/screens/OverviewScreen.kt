@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Notifications
@@ -37,6 +38,10 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,9 +52,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.xdripyou.app.domain.ChartWindow
 import dev.xdripyou.app.domain.GlucoseUnit
+import dev.xdripyou.app.domain.TreatmentEntry
 import dev.xdripyou.app.ui.MainUiState
 import dev.xdripyou.app.ui.components.ActiveAlertBanner
 import dev.xdripyou.app.ui.components.GlucoseChart
+import dev.xdripyou.app.ui.components.TreatmentEditorSheet
 import dev.xdripyou.app.ui.theme.LocalGlucoseColors
 import java.util.Locale
 
@@ -59,6 +66,7 @@ fun OverviewScreen(
     onSelectWindow: (ChartWindow) -> Unit,
     onSnoozeAlert: (Int) -> Unit,
     onStopAlert: () -> Unit,
+    onAddTreatment: (TreatmentEntry) -> Unit,
     onOpenNotificationListener: () -> Unit,
     onRequestPostNotifications: () -> Unit,
     onRequestBatteryExemption: () -> Unit,
@@ -72,6 +80,7 @@ fun OverviewScreen(
     val latest = state.latestReading
     val deltaMgdl = state.latestDeltaMgdl
     val stats = state.windowStats
+    var showTreatmentSheet by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -246,6 +255,32 @@ fun OverviewScreen(
                                 }
                             }
                         }
+
+                        Spacer(Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            val lastPred = state.predictions.lastOrNull()
+                            if (lastPred != null) {
+                                Text(
+                                    text = "Trend 30m: ~${GlucoseUnit.formatValue(lastPred.mgdl, settings.useMgdl)} ${GlucoseUnit.unitLabel(settings.useMgdl)}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = scheme.tertiary,
+                                )
+                            } else {
+                                Spacer(Modifier.width(1.dp))
+                            }
+                            FilledTonalButton(
+                                onClick = { showTreatmentSheet = true },
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                            ) {
+                                Icon(Icons.Rounded.Add, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Eintrag", maxLines = 1)
+                            }
+                        }
                     }
                 }
             }
@@ -275,6 +310,8 @@ fun OverviewScreen(
                     Spacer(Modifier.height(14.dp))
                     GlucoseChart(
                         readings = state.readingsInWindow,
+                        treatments = state.treatmentsInWindow,
+                        predictions = state.predictions,
                         windowMs = state.chartWindow.durationMs,
                         nowMs = state.nowMs,
                         useMgdl = settings.useMgdl,
@@ -328,6 +365,17 @@ fun OverviewScreen(
                 }
             }
         }
+    }
+
+    if (showTreatmentSheet) {
+        TreatmentEditorSheet(
+            useMgdl = settings.useMgdl,
+            onDismiss = { showTreatmentSheet = false },
+            onSave = { entry ->
+                onAddTreatment(entry)
+                showTreatmentSheet = false
+            },
+        )
     }
 }
 

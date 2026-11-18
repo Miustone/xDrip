@@ -17,6 +17,7 @@ data class GlucoseReading(
     val trend: TrendArrow,
     val source: String,
     val rawText: String? = null,
+    val syncedNightscout: Boolean = false,
 ) {
     /** Matches xDrip's `Home.stale_data_millis()` default (11 minutes = 660,000 ms). */
     fun isStaleAt(nowMs: Long): Boolean = (nowMs - timestampMs) > STALE_DATA_MS
@@ -26,6 +27,26 @@ data class GlucoseReading(
     companion object {
         const val STALE_DATA_MS = 660_000L
     }
+}
+
+data class PredictionPoint(
+    val timestampMs: Long,
+    val mgdl: Double,
+)
+
+data class TreatmentEntry(
+    val id: Long = 0L,
+    val timestampMs: Long,
+    val insulinUnits: Double = 0.0,
+    val carbsGrams: Double = 0.0,
+    val bloodGlucoseMgdl: Double? = null,
+    val note: String = "",
+    val eventType: String = "Meal Bolus",
+    val syncedNightscout: Boolean = false,
+) {
+    val hasInsulin: Boolean get() = insulinUnits > 0.0
+    val hasCarbs: Boolean get() = carbsGrams > 0.0
+    val hasBloodGlucose: Boolean get() = bloodGlucoseMgdl != null && bloodGlucoseMgdl > 0.0
 }
 
 data class GlucoseStats(

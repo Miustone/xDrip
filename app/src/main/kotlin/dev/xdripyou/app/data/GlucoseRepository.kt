@@ -5,11 +5,13 @@ import dev.xdripyou.app.data.db.AlertRuleEntity
 import dev.xdripyou.app.data.db.AppDatabase
 import dev.xdripyou.app.data.db.BgReadingEntity
 import dev.xdripyou.app.data.db.CollectorEventEntity
+import dev.xdripyou.app.data.db.TreatmentEntity
 import dev.xdripyou.app.domain.ActiveAlertState
 import dev.xdripyou.app.domain.AlertRule
 import dev.xdripyou.app.domain.CamApsParser
 import dev.xdripyou.app.domain.CollectorEvent
 import dev.xdripyou.app.domain.GlucoseReading
+import dev.xdripyou.app.domain.TreatmentEntry
 import dev.xdripyou.app.domain.TrendArrow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -34,6 +36,9 @@ class GlucoseRepository(
     fun observeReadingsSince(sinceMs: Long, limit: Int = 600): Flow<List<GlucoseReading>> =
         db.bgReadingDao().observeSince(sinceMs, limit).map { list -> list.map { it.toDomain() } }
 
+    fun observeTreatmentsSince(sinceMs: Long, limit: Int = 300): Flow<List<TreatmentEntry>> =
+        db.treatmentDao().observeSince(sinceMs, limit).map { list -> list.map { it.toDomain() } }
+
     fun observeAlertRules(): Flow<List<AlertRule>> =
         db.alertRuleDao().observeAll().map { list -> list.map { it.toDomain() } }
 
@@ -45,6 +50,12 @@ class GlucoseRepository(
 
     suspend fun getLatestReadings(limit: Int): List<GlucoseReading> =
         db.bgReadingDao().getLatest(limit).map { it.toDomain() }
+
+    suspend fun addOrUpdateTreatment(entry: TreatmentEntry): Long =
+        db.treatmentDao().upsert(TreatmentEntity.fromDomain(entry))
+
+    suspend fun deleteTreatment(id: Long) =
+        db.treatmentDao().deleteById(id)
 
     suspend fun getAlertRules(): List<AlertRule> {
         val existing = db.alertRuleDao().getAll()
@@ -87,6 +98,8 @@ class GlucoseRepository(
         source: String,
         rawText: String?,
         applyDeduplication: Boolean,
+        overrideTrend: TrendArrow? = null,
+        syncedNightscout: Boolean = false,
     ): InsertOutcome = insertMutex.withLock {
         val settings = settingsStore.current()
         val latest = db.bgReadingDao().getLatest(1).firstOrNull()?.toDomain()
@@ -94,7 +107,6 @@ class GlucoseRepository(
 
         if (applyDeduplication && latest != null) {
             val sameValue = latest.mgdl.roundToInt() == roundedMgdl.roundToInt()
-            // Matches xDrip UiBasedCollector: 10s if changed, 250s (samplePeriod - samplePeriod/6) if unchanged
             val dedupPeriodMs = if (sameValue) 250_000L else 10_000L
             if (timestampMs - latest.timestampMs < dedupPeriodMs) {
                 return@withLock InsertOutcome.Deduplicated(latest.timestampMs)
@@ -117,11 +129,12 @@ class GlucoseRepository(
             0.0
         }
 
-        val trend = if (latest != null && timestampMs > latest.timestampMs && (timestampMs - latest.timestampMs) <= 1_800_000L) {
-            TrendArrow.fromSlopePerMin(slopePerMin)
-        } else {
-            TrendArrow.NOT_COMPUTABLE
-        }
+        val trend = overrideTrend
+            ?: if (latest != null && timestampMs > latest.timestampMs && (timestampMs - latest.timestampMs) <= 1_800_000L) {
+                TrendArrow.fromSlopePerMin(slopePerMin)
+            } else {
+                TrendArrow.NOT_COMPUTABLE
+            }
 
         val entity = BgReadingEntity(
             timestampMs = timestampMs,
@@ -130,12 +143,100 @@ class GlucoseRepository(
             trendName = trend.wireName,
             source = source,
             rawText = rawText,
+            syncedNightscout = syncedNightscout,
         )
         val rowId = db.bgReadingDao().insert(entity)
         if (rowId == -1L) {
             return@withLock InsertOutcome.Deduplicated(timestampMs)
         }
         InsertOutcome.Inserted(entity.copy(id = rowId).toDomain())
+    }
+
+    suspend fun syncNightscout(): Result<String> {
+        val settings = settingsStore.current()
+        if (settings.nightscoutUrl.isBlank()) {
+            return Result.failure(IllegalStateException("Keine Nightscout-URL hinterlegt"))
+        }
+
+        var pulled = 0
+        var uploadedReadings = 0
+        var uploadedTreatments = 0
+
+        if (settings.nightscoutFollowEnabled) {
+            val res = NightscoutClient.fetchLatestEntries(settings.nightscoutUrl, settings.nightscoutApiSecret, count = 48)
+            if (res.isFailure) return Result.failure(res.exceptionOrNull()!!)
+            val entries = res.getOrThrow().sortedBy { it.timestampMs }
+            for (e in entries) {
+                val out = insertReading(
+                    mgdl = e.sgvMgdl,
+                    timestampMs = e.timestampMs,
+                    source = "Nightscout",
+                    rawText = null,
+                    applyDeduplication = false,
+                    overrideTrend = NightscoutClient.directionToTrend(e.direction),
+                    syncedNightscout = true,
+                )
+                if (out is InsertOutcome.Inserted) pulled++
+            }
+        }
+
+        if (settings.nightscoutUploadEnabled) {
+            val unsyncedReadings = db.bgReadingDao().getUnsynced(100)
+            if (unsyncedReadings.isNotEmpty()) {
+                val res = NightscoutClient.uploadReadings(
+                    settings.nightscoutUrl,
+                    settings.nightscoutApiSecret,
+                    unsyncedReadings.map { it.toDomain() },
+                )
+                if (res.isFailure) return Result.failure(res.exceptionOrNull()!!)
+                db.bgReadingDao().markSynced(unsyncedReadings.map { it.id })
+                uploadedReadings = unsyncedReadings.size
+            }
+
+            val unsyncedTreatments = db.treatmentDao().getUnsynced(50)
+            if (unsyncedTreatments.isNotEmpty()) {
+                val res = NightscoutClient.uploadTreatments(
+                    settings.nightscoutUrl,
+                    settings.nightscoutApiSecret,
+                    unsyncedTreatments.map { it.toDomain() },
+                )
+                if (res.isFailure) return Result.failure(res.exceptionOrNull()!!)
+                db.treatmentDao().markSynced(unsyncedTreatments.map { it.id })
+                uploadedTreatments = unsyncedTreatments.size
+            }
+        }
+
+        return Result.success("Sync OK (↓ $pulled Werte, ↑ $uploadedReadings Werte / $uploadedTreatments Einträge)")
+    }
+
+    suspend fun exportBackupJson(): String {
+        val readings = db.bgReadingDao().getLatest(2000).map { it.toDomain() }
+        val treatments = db.treatmentDao().getLatest(500).map { it.toDomain() }
+        val rules = getAlertRules()
+        return BackupManager.encodeToJson(BackupPayload(readings, treatments, rules))
+    }
+
+    suspend fun importBackupJson(jsonText: String): String {
+        val payload = BackupManager.decodeFromJson(jsonText)
+        var importedReadings = 0
+        for (r in payload.readings.sortedBy { it.timestampMs }) {
+            val res = insertReading(
+                mgdl = r.mgdl,
+                timestampMs = r.timestampMs,
+                source = r.source,
+                rawText = r.rawText,
+                applyDeduplication = false,
+                overrideTrend = r.trend,
+            )
+            if (res is InsertOutcome.Inserted) importedReadings++
+        }
+        for (t in payload.treatments) {
+            db.treatmentDao().upsert(TreatmentEntity.fromDomain(t.copy(id = 0L)))
+        }
+        for (rule in payload.alertRules) {
+            db.alertRuleDao().upsert(AlertRuleEntity.fromDomain(rule))
+        }
+        return "Importiert: $importedReadings Werte, ${payload.treatments.size} Einträge, ${payload.alertRules.size} Alarme"
     }
 
     suspend fun recordCollectorEvent(
@@ -174,10 +275,30 @@ class GlucoseRepository(
                 applyDeduplication = false,
             )
         }
+        // Seed 2 sample treatments for demonstration
+        addOrUpdateTreatment(
+            TreatmentEntry(
+                timestampMs = now - 3 * 3_600_000L,
+                insulinUnits = 4.5,
+                carbsGrams = 48.0,
+                note = "Abendessen (Demo)",
+                eventType = "Meal Bolus",
+            )
+        )
+        addOrUpdateTreatment(
+            TreatmentEntry(
+                timestampMs = now - 45 * 60_000L,
+                insulinUnits = 1.5,
+                carbsGrams = 0.0,
+                note = "Korrektur (Demo)",
+                eventType = "Correction Bolus",
+            )
+        )
     }
 
     suspend fun clearAllReadings() {
         db.bgReadingDao().deleteAll()
+        db.treatmentDao().deleteAll()
         db.collectorEventDao().deleteAll()
         settingsStore.resetCompanionJamState()
     }

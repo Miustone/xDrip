@@ -23,8 +23,10 @@ import dev.xdripyou.app.domain.AlertEvaluator
 import dev.xdripyou.app.domain.AlertProfile
 import dev.xdripyou.app.domain.AlertRule
 import dev.xdripyou.app.domain.AppSettings
+import dev.xdripyou.app.domain.GlucosePredictor
 import dev.xdripyou.app.domain.GlucoseReading
 import dev.xdripyou.app.domain.GlucoseUnit
+import dev.xdripyou.app.widget.GlucoseWidgetProvider
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.math.max
@@ -53,7 +55,7 @@ class AlertEngine(
         val title: String
         val body: String
         if (current == null) {
-            title = "xDrip You · Warte auf CamAPS FX"
+            title = "xDrip 2 You · Warte auf Daten"
             body = "Noch kein Messwert empfangen"
         } else {
             val formatted = GlucoseUnit.formatValue(current.mgdl, settings.useMgdl)
@@ -89,6 +91,7 @@ class AlertEngine(
     }
 
     suspend fun refreshOngoingNotification() {
+        GlucoseWidgetProvider.refreshAll(context)
         val settings = repository.settingsStore.current()
         if (!settings.foregroundServiceEnabled) return
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -100,6 +103,10 @@ class AlertEngine(
         val settings = repository.settingsStore.current()
         val rules = repository.getAlertRules()
         val now = System.currentTimeMillis()
+
+        if (settings.localBroadcastEnabled) {
+            XdripBroadcastSender.sendReading(context, latest, settings.useMgdl)
+        }
 
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.cancel(NOTIF_ID_MISSED)
@@ -123,7 +130,7 @@ class AlertEngine(
                     stopAlertLocked(clearActive = true)
                 }
             }
-            evaluateRapidChangeAlertsLocked(settings, latest, now)
+            evaluateSecondaryAlertsLocked(settings, latest, now)
             return@withLock
         }
 
@@ -170,6 +177,7 @@ class AlertEngine(
         val settings: AppSettings
         mutex.withLock {
             NotificationChannels.ensureAll(context)
+            GlucoseWidgetProvider.refreshAll(context)
             settings = repository.settingsStore.current()
             if (settings.foregroundServiceEnabled) {
                 val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -191,9 +199,9 @@ class AlertEngine(
             val missedMins = settings.missedReadingMinutes.coerceAtLeast(5)
             val elapsedMs = now - latest.timestampMs
             if (elapsedMs >= missedMins * 60_000L && elapsedMs < 21_600_000L) {
-                val (lastMissedMs, _) = repository.settingsStore.getLastAlertTimestamps()
+                val cooldowns = repository.settingsStore.getAlertCooldowns()
                 val snoozeMins = settings.missedReadingSnoozeMinutes.coerceAtLeast(5)
-                if (now - lastMissedMs >= snoozeMins * 60_000L) {
+                if (now - cooldowns.lastMissedMs >= snoozeMins * 60_000L) {
                     repository.settingsStore.setLastMissedAlertMs(now)
                     postMissedReadingNotification((elapsedMs / 60_000L).toInt())
                 }
@@ -201,45 +209,98 @@ class AlertEngine(
         }
     }
 
-    private suspend fun evaluateRapidChangeAlertsLocked(
+    private suspend fun evaluateSecondaryAlertsLocked(
         settings: AppSettings,
         latest: GlucoseReading,
         now: Long,
     ) {
-        val recent = repository.getLatestReadings(4)
-        if (recent.size < 4) return
-        val (_, lastRapidMs) = repository.settingsStore.getLastAlertTimestamps()
-        if (now - lastRapidMs < 900_000L) return
-
+        val recent24 = repository.getLatestReadings(40)
+        if (recent24.isEmpty()) return
+        val cooldowns = repository.settingsStore.getAlertCooldowns()
         val formatted = GlucoseUnit.formatValue(latest.mgdl, settings.useMgdl)
         val unitLabel = GlucoseUnit.unitLabel(settings.useMgdl)
 
-        if (settings.fallingAlertEnabled &&
-            AlertEvaluator.isRapidRateTriggered(recent, settings.fallingRateMgdlPerMin, drop = true, nowMs = now)
-        ) {
-            repository.settingsStore.setLastRapidAlertMs(now)
-            postAlertNotification(
-                title = "Schneller Abfall · $formatted $unitLabel",
-                body = "Blutzucker fällt schneller als ${String.format(java.util.Locale.US, "%.1f", settings.fallingRateMgdlPerMin)} mg/dL/Min.",
-                overrideSilent = false,
-                vibrate = true,
-                volumeFrac = 0.7f,
-                defaultSnoozeMins = 20,
-            )
-            return
+        // 1. Rapid rise / fall
+        if (recent24.size >= 4 && now - cooldowns.lastRapidMs >= 900_000L) {
+            if (settings.fallingAlertEnabled &&
+                AlertEvaluator.isRapidRateTriggered(recent24, settings.fallingRateMgdlPerMin, drop = true, nowMs = now)
+            ) {
+                repository.settingsStore.setLastRapidAlertMs(now)
+                postAlertNotification(
+                    title = "Schneller Abfall · $formatted $unitLabel",
+                    body = "Blutzucker fällt schneller als ${String.format(java.util.Locale.US, "%.1f", settings.fallingRateMgdlPerMin)} mg/dL/Min.",
+                    overrideSilent = false,
+                    vibrate = true,
+                    volumeFrac = 0.7f,
+                    defaultSnoozeMins = 20,
+                )
+                return
+            }
+
+            if (settings.risingAlertEnabled &&
+                AlertEvaluator.isRapidRateTriggered(recent24, settings.risingRateMgdlPerMin, drop = false, nowMs = now)
+            ) {
+                repository.settingsStore.setLastRapidAlertMs(now)
+                postAlertNotification(
+                    title = "Schneller Anstieg · $formatted $unitLabel",
+                    body = "Blutzucker steigt schneller als ${String.format(java.util.Locale.US, "%.1f", settings.risingRateMgdlPerMin)} mg/dL/Min.",
+                    overrideSilent = false,
+                    vibrate = true,
+                    volumeFrac = 0.7f,
+                    defaultSnoozeMins = 20,
+                )
+                return
+            }
         }
 
-        if (settings.risingAlertEnabled &&
-            AlertEvaluator.isRapidRateTriggered(recent, settings.risingRateMgdlPerMin, drop = false, nowMs = now)
+        // 2. Low prediction alarm
+        if (settings.lowPredictionEnabled &&
+            settings.lowAlertsDisabledUntilMs <= now &&
+            now - cooldowns.lastLowPredMs >= 900_000L &&
+            latest.mgdl > settings.lowPredictionThresholdMgdl
         ) {
-            repository.settingsStore.setLastRapidAlertMs(now)
+            val preds = GlucosePredictor.predict(recent24, nowMs = now)
+            val minsUntil = GlucosePredictor.minutesUntilBelow(
+                predictions = preds,
+                baseTimestampMs = latest.timestampMs,
+                thresholdMgdl = settings.lowPredictionThresholdMgdl,
+                horizonMinutes = settings.lowPredictionHorizonMinutes,
+            )
+            if (minsUntil != null) {
+                repository.settingsStore.setLastLowPredAlertMs(now)
+                val threshStr = GlucoseUnit.formatValue(settings.lowPredictionThresholdMgdl, settings.useMgdl)
+                postAlertNotification(
+                    title = "Niedrig-Vorhersage · $formatted $unitLabel",
+                    body = "Voraussichtlich unter $threshStr $unitLabel in ca. $minsUntil Min.",
+                    overrideSilent = false,
+                    vibrate = true,
+                    volumeFrac = 0.75f,
+                    defaultSnoozeMins = 20,
+                )
+                return
+            }
+        }
+
+        // 3. Persistent high alarm
+        if (settings.persistentHighEnabled &&
+            settings.highAlertsDisabledUntilMs <= now &&
+            now - cooldowns.lastPersistentHighMs >= 1_800_000L &&
+            AlertEvaluator.isPersistentHighTriggered(
+                readingsDesc = recent24,
+                thresholdMgdl = settings.persistentHighThresholdMgdl,
+                durationMinutes = settings.persistentHighMinutes,
+                nowMs = now,
+            )
+        ) {
+            repository.settingsStore.setLastPersistentHighAlertMs(now)
+            val threshStr = GlucoseUnit.formatValue(settings.persistentHighThresholdMgdl, settings.useMgdl)
             postAlertNotification(
-                title = "Schneller Anstieg · $formatted $unitLabel",
-                body = "Blutzucker steigt schneller als ${String.format(java.util.Locale.US, "%.1f", settings.risingRateMgdlPerMin)} mg/dL/Min.",
+                title = "Anhaltend Hoch · $formatted $unitLabel",
+                body = "Seit über ${settings.persistentHighMinutes} Min. über $threshStr $unitLabel",
                 overrideSilent = false,
                 vibrate = true,
                 volumeFrac = 0.7f,
-                defaultSnoozeMins = 20,
+                defaultSnoozeMins = 45,
             )
         }
     }
@@ -382,8 +443,8 @@ class AlertEngine(
         )
         val notif = NotificationCompat.Builder(context, NotificationChannels.MISSED_ALERTS)
             .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setContentTitle("Keine neuen CamAPS-Werte")
-            .setContentText("Letzter Messwert vor $minsSince Min. Prüfe CamAPS FX oder Benachrichtigungszugriff.")
+            .setContentTitle("Keine neuen Messwerte")
+            .setContentText("Letzter Messwert vor $minsSince Min. Prüfe CamAPS FX oder Datenquelle.")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(openIntent)

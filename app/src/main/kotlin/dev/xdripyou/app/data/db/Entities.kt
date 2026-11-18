@@ -7,6 +7,7 @@ import dev.xdripyou.app.domain.ActiveAlertState
 import dev.xdripyou.app.domain.AlertRule
 import dev.xdripyou.app.domain.CollectorEvent
 import dev.xdripyou.app.domain.GlucoseReading
+import dev.xdripyou.app.domain.TreatmentEntry
 import dev.xdripyou.app.domain.TrendArrow
 
 @Entity(
@@ -21,6 +22,7 @@ data class BgReadingEntity(
     val trendName: String,
     val source: String,
     val rawText: String?,
+    val syncedNightscout: Boolean = false,
 ) {
     fun toDomain(): GlucoseReading = GlucoseReading(
         id = id,
@@ -30,7 +32,47 @@ data class BgReadingEntity(
         trend = TrendArrow.fromWireName(trendName),
         source = source,
         rawText = rawText,
+        syncedNightscout = syncedNightscout,
     )
+}
+
+@Entity(
+    tableName = "treatments",
+    indices = [Index(value = ["timestampMs"])],
+)
+data class TreatmentEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val timestampMs: Long,
+    val insulinUnits: Double,
+    val carbsGrams: Double,
+    val bloodGlucoseMgdl: Double?,
+    val note: String,
+    val eventType: String,
+    val syncedNightscout: Boolean = false,
+) {
+    fun toDomain(): TreatmentEntry = TreatmentEntry(
+        id = id,
+        timestampMs = timestampMs,
+        insulinUnits = insulinUnits,
+        carbsGrams = carbsGrams,
+        bloodGlucoseMgdl = bloodGlucoseMgdl,
+        note = note,
+        eventType = eventType,
+        syncedNightscout = syncedNightscout,
+    )
+
+    companion object {
+        fun fromDomain(entry: TreatmentEntry): TreatmentEntity = TreatmentEntity(
+            id = entry.id,
+            timestampMs = entry.timestampMs,
+            insulinUnits = entry.insulinUnits,
+            carbsGrams = entry.carbsGrams,
+            bloodGlucoseMgdl = entry.bloodGlucoseMgdl,
+            note = entry.note,
+            eventType = entry.eventType,
+            syncedNightscout = entry.syncedNightscout,
+        )
+    }
 }
 
 @Entity(tableName = "alert_rules")
