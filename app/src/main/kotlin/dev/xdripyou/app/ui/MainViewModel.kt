@@ -7,22 +7,28 @@ import dev.xdripyou.app.XdripYouApplication
 import dev.xdripyou.app.data.InsertOutcome
 import dev.xdripyou.app.data.SettingsStore
 import dev.xdripyou.app.domain.ActiveAlertState
+import dev.xdripyou.app.domain.AgpStatsCalculator
 import dev.xdripyou.app.domain.AlertProfile
 import dev.xdripyou.app.domain.AlertRule
 import dev.xdripyou.app.domain.AppSettings
 import dev.xdripyou.app.domain.CamApsParser
 import dev.xdripyou.app.domain.ChartWindow
 import dev.xdripyou.app.domain.CollectorEvent
+import dev.xdripyou.app.domain.ExtendedGlucoseStats
 import dev.xdripyou.app.domain.GlucosePredictor
 import dev.xdripyou.app.domain.GlucoseReading
 import dev.xdripyou.app.domain.GlucoseStats
+import dev.xdripyou.app.domain.IobCobCalculator
+import dev.xdripyou.app.domain.IobCobSnapshot
 import dev.xdripyou.app.domain.PermissionStatus
 import dev.xdripyou.app.domain.PredictionPoint
 import dev.xdripyou.app.domain.SourceUnitMode
+import dev.xdripyou.app.domain.StatsPeriod
 import dev.xdripyou.app.domain.ThemeModeOption
 import dev.xdripyou.app.domain.TreatmentEntry
 import dev.xdripyou.app.service.GlucoseForegroundService
 import dev.xdripyou.app.service.SystemPermissionsHelper
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -31,6 +37,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class MainUiState(
     val isLoaded: Boolean = false,
@@ -41,10 +48,15 @@ data class MainUiState(
     val activeAlert: ActiveAlertState? = null,
     val collectorEvents: List<CollectorEvent> = emptyList(),
     val chartWindow: ChartWindow = ChartWindow.SIX_HOURS,
+    val statsPeriod: StatsPeriod = StatsPeriod.DAY_1,
+    val extendedStats: ExtendedGlucoseStats = ExtendedGlucoseStats(),
     val permissions: PermissionStatus = PermissionStatus(),
     val nowMs: Long = System.currentTimeMillis(),
 ) {
     val latestReading: GlucoseReading? get() = readings24h.firstOrNull()
+
+    val iobCob: IobCobSnapshot
+        get() = IobCobCalculator.snapshot(treatments24h, nowMs, settings)
 
     val latestDeltaMgdl: Double?
         get() {
@@ -97,6 +109,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val speechHelper = app.speechHelper
 
     private val chartWindowFlow = MutableStateFlow(ChartWindow.SIX_HOURS)
+    private val statsPeriodFlow = MutableStateFlow(StatsPeriod.DAY_1)
+    private val extendedStatsFlow = MutableStateFlow(ExtendedGlucoseStats())
     private val permissionsFlow = MutableStateFlow(SystemPermissionsHelper.getStatus(app))
     private val nowMsFlow = MutableStateFlow(System.currentTimeMillis())
 
@@ -112,13 +126,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         PrimaryBundle(settings, readings, treatments, rules, activeAlert)
     }
 
-    val uiState: StateFlow<MainUiState> = combine(
-        primaryDataFlow,
+    private val metaFlow = combine(
         repo.observeCollectorEvents(limit = 50),
         chartWindowFlow,
+        statsPeriodFlow,
+        extendedStatsFlow,
         permissionsFlow,
+    ) { events, window, statsPeriod, extStats, perms ->
+        MetaBundle(events, window, statsPeriod, extStats, perms)
+    }
+
+    val uiState: StateFlow<MainUiState> = combine(
+        primaryDataFlow,
+        metaFlow,
         nowMsFlow,
-    ) { primary, events, window, perms, nowMs ->
+    ) { primary, meta, nowMs ->
         MainUiState(
             isLoaded = true,
             settings = primary.settings,
@@ -126,9 +148,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             treatments24h = primary.treatments,
             alertRules = primary.rules,
             activeAlert = primary.activeAlert,
-            collectorEvents = events,
-            chartWindow = window,
-            permissions = perms,
+            collectorEvents = meta.events,
+            chartWindow = meta.window,
+            statsPeriod = meta.statsPeriod,
+            extendedStats = meta.extendedStats,
+            permissions = meta.perms,
             nowMs = nowMs,
         )
     }.stateIn(
@@ -145,6 +169,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 permissionsFlow.value = SystemPermissionsHelper.getStatus(app)
             }
         }
+        viewModelScope.launch {
+            combine(statsPeriodFlow, primaryDataFlow) { period, primary ->
+                Triple(period, primary.settings.targetLowMgdl, primary.settings.targetHighMgdl)
+            }.collect { (period, targetLow, targetHigh) ->
+                refreshExtendedStats(period, targetLow, targetHigh)
+            }
+        }
+    }
+
+    private suspend fun refreshExtendedStats(
+        period: StatsPeriod,
+        targetLowMgdl: Double,
+        targetHighMgdl: Double,
+    ) {
+        val now = System.currentTimeMillis()
+        val since = now - period.days * 86_400_000L
+        val computed = withContext(Dispatchers.Default) {
+            val readings = repo.getReadingsSince(since, limit = (period.days * 320).coerceAtLeast(600))
+            AgpStatsCalculator.computeExtendedStats(
+                readings = readings,
+                period = period,
+                targetLowMgdl = targetLowMgdl,
+                targetHighMgdl = targetHighMgdl,
+            )
+        }
+        extendedStatsFlow.value = computed
+    }
+
+    fun selectStatsPeriod(period: StatsPeriod) {
+        statsPeriodFlow.value = period
     }
 
     fun refreshPermissions() {
@@ -207,6 +261,55 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setBroadcastTargetPackage(pkg: String) {
         viewModelScope.launch {
             settingsStore.update { it[SettingsStore.Keys.BROADCAST_TARGET_PACKAGE] = pkg.trim() }
+        }
+    }
+
+    fun setAcceptLocalBroadcastReadings(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.ACCEPT_LOCAL_BROADCAST_READINGS] = enabled }
+        }
+    }
+
+    fun setBroadcastSnoozeConfig(sendSnooze: Boolean, acceptSnooze: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.BROADCAST_SNOOZE_ENABLED] = sendSnooze
+                it[SettingsStore.Keys.ACCEPT_BROADCAST_SNOOZE] = acceptSnooze
+            }
+        }
+    }
+
+    fun setIobCobConfig(
+        showIobCob: Boolean,
+        diaMinutes: Int,
+        peakMinutes: Int,
+        carbDelayMinutes: Int,
+        carbAbsorptionGPerH: Int,
+    ) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.SHOW_IOB_COB] = showIobCob
+                it[SettingsStore.Keys.INSULIN_DURATION_MINUTES] = diaMinutes.coerceIn(120, 480)
+                it[SettingsStore.Keys.INSULIN_PEAK_MINUTES] = peakMinutes.coerceIn(30, 120)
+                it[SettingsStore.Keys.CARB_DELAY_MINUTES] = carbDelayMinutes.coerceIn(0, 60)
+                it[SettingsStore.Keys.CARB_ABSORPTION_G_PER_H] = carbAbsorptionGPerH.coerceIn(10, 90)
+            }
+            alertEngine.refreshOngoingNotification()
+        }
+    }
+
+    fun setLocalWebServiceConfig(
+        enabled: Boolean,
+        openNetwork: Boolean,
+        secret: String,
+    ) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.LOCAL_WEB_SERVICE_ENABLED] = enabled
+                it[SettingsStore.Keys.LOCAL_WEB_SERVICE_OPEN] = openNetwork
+                it[SettingsStore.Keys.LOCAL_WEB_SERVICE_SECRET] = secret.trim()
+            }
+            app.localWebServer.syncWithSettings(settingsStore.current())
         }
     }
 
@@ -526,6 +629,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun addTreatment(entry: TreatmentEntry) {
         viewModelScope.launch {
             repo.addOrUpdateTreatment(entry)
+            alertEngine.refreshOngoingNotification()
             if (settingsStore.current().nightscoutUploadEnabled) {
                 repo.syncNightscout()
             }
@@ -533,7 +637,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deleteTreatment(id: Long) {
-        viewModelScope.launch { repo.deleteTreatment(id) }
+        viewModelScope.launch {
+            repo.deleteTreatment(id)
+            alertEngine.refreshOngoingNotification()
+        }
     }
 
     fun silenceAlerts(scope: String, minutes: Int) {
@@ -670,5 +777,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val treatments: List<TreatmentEntry>,
         val rules: List<AlertRule>,
         val activeAlert: ActiveAlertState?,
+    )
+
+    private data class MetaBundle(
+        val events: List<CollectorEvent>,
+        val window: ChartWindow,
+        val statsPeriod: StatsPeriod,
+        val extendedStats: ExtendedGlucoseStats,
+        val perms: PermissionStatus,
     )
 }

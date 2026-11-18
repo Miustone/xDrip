@@ -67,6 +67,16 @@
         </receiver>
 
         <receiver
+            android:name=".service.XdripBroadcastReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.eveningoutpost.dexdrip.BgEstimate" />
+                <action android:name="com.eveningoutpost.dexdrip.Snooze" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".widget.GlucoseWidgetProvider"
             android:exported="true"
             android:label="@string/widget_name">

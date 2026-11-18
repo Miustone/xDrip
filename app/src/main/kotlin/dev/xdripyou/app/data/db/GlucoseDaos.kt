@@ -11,6 +11,9 @@ interface BgReadingDao {
     @Query("SELECT * FROM bg_readings WHERE timestampMs >= :sinceMs ORDER BY timestampMs DESC LIMIT :limit")
     fun observeSince(sinceMs: Long, limit: Int = 600): Flow<List<BgReadingEntity>>
 
+    @Query("SELECT * FROM bg_readings WHERE timestampMs >= :sinceMs ORDER BY timestampMs DESC LIMIT :limit")
+    suspend fun getSince(sinceMs: Long, limit: Int = 30_000): List<BgReadingEntity>
+
     @Query("SELECT * FROM bg_readings ORDER BY timestampMs DESC LIMIT :limit")
     suspend fun getLatest(limit: Int): List<BgReadingEntity>
 
@@ -34,6 +37,9 @@ interface BgReadingDao {
 interface TreatmentDao {
     @Query("SELECT * FROM treatments WHERE timestampMs >= :sinceMs ORDER BY timestampMs DESC LIMIT :limit")
     fun observeSince(sinceMs: Long, limit: Int = 300): Flow<List<TreatmentEntity>>
+
+    @Query("SELECT * FROM treatments WHERE timestampMs >= :sinceMs ORDER BY timestampMs DESC LIMIT :limit")
+    suspend fun getSince(sinceMs: Long, limit: Int = 500): List<TreatmentEntity>
 
     @Query("SELECT * FROM treatments ORDER BY timestampMs DESC LIMIT :limit")
     suspend fun getLatest(limit: Int = 300): List<TreatmentEntity>

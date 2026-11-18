@@ -6,6 +6,29 @@ Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 
 ---
 
+## [26.11.5] - 2026-11-18
+
+### Hinzugefügt & Portiert
+- **IOB & COB Engine (`IobCobCalculator.kt`, `OverviewScreen.kt`, `AlertEngine.kt`):**
+  - Portierung von xDrips trapezförmiger Insulin-Wirkungskurve (`LinearTrapezoidInsulin` / `Treatments`) sowie der verzögerten KH-Resorption.
+  - Konfigurierbare Insulin-Wirkdauer (DIA, 3–7 Std.), Peak-Profil (Ultra-Schnell / Schnell / Klassisch) und KH-Aufnahmerate (g/Std.) unter *Optionen -> Anzeige, IOB/COB & Material 3 You*.
+  - Anzeige von aktivem **IOB (IE)** und **COB (g)** als Material-3-Chips auf der Übersichts-Karte sowie in der laufenden Status-Benachrichtigung.
+- **Mehr-Tage-Statistik & AGP-Perzentil-Chart (`AgpStats.kt`, `PercentileChart.kt`, `HistoryScreen.kt`):**
+  - Portierung von xDrips `PercentileView` / `StatsActivity`: Zeitraum-Auswahl für **24 Std., 7 Tage, 14 Tage, 30 Tage und 90 Tage**.
+  - Zeigt 5-Zonen-TIR-Balken, GMI, Ø, SD, CV %, Sensor-Datenabdeckung (%) sowie das **Ambulatory Glucose Profile (AGP)** mit 10–90% Band, 25–75% IQR-Band und Median-Kurve über 24 Stunden.
+- **Therapie-Bearbeitung & Nightscout-Treatments-Abruf (`TreatmentEditorSheet.kt`, `NightscoutClient.kt`, `GlucoseRepository.kt`):**
+  - Bestehende Therapie-Einträge im Verlauf lassen sich per Antippen direkt bearbeiten.
+  - Nightscout-Follower ruft jetzt neben Glukosewerten auch Therapie-Einträge (`/api/v1/treatments.json`) dedupliziert ab.
+- **Lokaler xDrip Web-Service (`LocalWebServer.kt`):**
+  - Eingebetteter HTTP-Server auf Port **`17580`** (kompatibel mit xDrip `XdripWebService`) für lokale Consumer (AAPS, Watchfaces, Nightwatch, Tasker).
+  - Unterstützt `/sgv.json`, `/status.json`, `/treatments.json` und `/pebble` inkl. optionalem WLAN-Zugriff (`0.0.0.0`) und SHA-1 `api-secret`-Schutz.
+- **xDrip Local Broadcast Empfang & Broadcast Snooze (`XdripBroadcastReceiver.kt`):**
+  - Optionaler Empfang externer `com.eveningoutpost.dexdrip.BgEstimate`-Broadcasts (z. B. von Juggluco/AAPS) mit Loop-Schutz.
+  - Senden & Empfangen von `com.eveningoutpost.dexdrip.Snooze` zur Alarm-Synchronisation zwischen Apps.
+- **Versionsstand:** `versionName = "26.11.5"`, `versionCode = 261105`.
+
+---
+
 ## [26.11.4] - 2026-11-18
 
 ### Hinzugefügt & Integriert

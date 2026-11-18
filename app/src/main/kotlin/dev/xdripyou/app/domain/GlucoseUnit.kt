@@ -28,6 +28,14 @@ object GlucoseUnit {
         }
     }
 
+    fun formatSpread(mgdl: Double, useMgdl: Boolean): String {
+        return if (useMgdl) {
+            mgdl.roundToInt().toString()
+        } else {
+            String.format(Locale.US, "%.1f", mgdl * MGDL_TO_MMOL)
+        }
+    }
+
     fun formatDelta(deltaMgdl: Double, useMgdl: Boolean): String {
         return if (useMgdl) {
             val rounded = deltaMgdl.roundToInt()

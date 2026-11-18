@@ -191,6 +191,7 @@ fun XdripYouRoot(
             )
             2 -> HistoryScreen(
                 state = state,
+                onSelectStatsPeriod = viewModel::selectStatsPeriod,
                 onAddTreatment = viewModel::addTreatment,
                 onDeleteTreatment = viewModel::deleteTreatment,
                 modifier = mod,
@@ -237,6 +238,10 @@ fun XdripYouRoot(
                 },
                 onSetLocalBroadcastEnabled = viewModel::setLocalBroadcastEnabled,
                 onSetBroadcastTargetPackage = viewModel::setBroadcastTargetPackage,
+                onSetAcceptLocalBroadcastReadings = viewModel::setAcceptLocalBroadcastReadings,
+                onSetBroadcastSnoozeConfig = viewModel::setBroadcastSnoozeConfig,
+                onSetIobCobConfig = viewModel::setIobCobConfig,
+                onSetLocalWebServiceConfig = viewModel::setLocalWebServiceConfig,
                 onSetRetentionDays = viewModel::setRetentionDays,
                 onExportJson = onExportJson,
                 onImportJson = onImportJson,

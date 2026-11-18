@@ -77,10 +77,24 @@ class AlertEngine(
             } else {
                 "$formatted $unitLabel ${current.trend.symbol}$deltaSuffix"
             }
-            body = if (settings.compactOngoingNotification) {
+            val baseBody = if (settings.compactOngoingNotification) {
                 if (minsAgo == 0L) "jetzt" else "vor ${minsAgo}m"
             } else {
                 if (minsAgo == 0L) "Gerade eben · ${current.source}" else "vor $minsAgo Min. · ${current.source}"
+            }
+            val iobCob = if (settings.showIobCob) repository.currentIobCob() else null
+            val iobSuffix = buildList {
+                if (iobCob != null && iobCob.hasActiveIob) {
+                    add("IOB ${String.format(java.util.Locale.US, "%.2f", iobCob.iobUnits)} IE")
+                }
+                if (iobCob != null && iobCob.hasActiveCob) {
+                    add("COB ${iobCob.cobGrams.roundToInt()} g")
+                }
+            }.joinToString(" · ")
+            body = if (iobSuffix.isNotEmpty() && !settings.compactOngoingNotification) {
+                "$baseBody · $iobSuffix"
+            } else {
+                baseBody
             }
         }
 
@@ -519,6 +533,9 @@ class AlertEngine(
                 nextAlertAtMs = nextAt,
             )
         )
+        if (repository.settingsStore.current().broadcastSnoozeEnabled) {
+            XdripBroadcastReceiver.sendSnooze(context)
+        }
     }
 
     suspend fun stopAlert(clearActive: Boolean) = mutex.withLock {

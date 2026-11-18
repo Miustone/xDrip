@@ -1,9 +1,12 @@
 package dev.xdripyou.app.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,6 +27,7 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Medication
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,7 +36,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -47,8 +53,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.xdripyou.app.domain.GlucoseReading
 import dev.xdripyou.app.domain.GlucoseUnit
+import dev.xdripyou.app.domain.StatsPeriod
 import dev.xdripyou.app.domain.TreatmentEntry
 import dev.xdripyou.app.ui.MainUiState
+import dev.xdripyou.app.ui.components.PercentileChart
 import dev.xdripyou.app.ui.components.TreatmentEditorSheet
 import dev.xdripyou.app.ui.theme.LocalGlucoseColors
 import java.text.SimpleDateFormat
@@ -66,9 +74,11 @@ private sealed class HistoryTimelineItem(val timestampMs: Long, val key: String)
     ) : HistoryTimelineItem(treatment.timestampMs, "t_${treatment.id}")
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun HistoryScreen(
     state: MainUiState,
+    onSelectStatsPeriod: (StatsPeriod) -> Unit,
     onAddTreatment: (TreatmentEntry) -> Unit,
     onDeleteTreatment: (Long) -> Unit,
     modifier: Modifier = Modifier,
@@ -76,13 +86,16 @@ fun HistoryScreen(
     val scheme = MaterialTheme.colorScheme
     val glucoseColors = LocalGlucoseColors.current
     val settings = state.settings
-    val stats = state.stats24h
+    val extStats = state.extendedStats
+    val stats = extStats.stats
     val readings = state.readings24h
     val treatments = state.treatments24h
     val timeFmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
 
     var filterIndex by remember { mutableIntStateOf(0) } // 0 = Alle, 1 = Glukose, 2 = Einträge
     var showTreatmentSheet by remember { mutableStateOf(false) }
+    var editingTreatment by remember { mutableStateOf<TreatmentEntry?>(null) }
+    var showAgpChart by remember { mutableStateOf(true) }
 
     val timelineItems = remember(readings, treatments, filterIndex, settings.useMgdl) {
         val list = mutableListOf<HistoryTimelineItem>()
@@ -127,14 +140,32 @@ fun HistoryScreen(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Text(
-                            "24-Stunden Time in Range",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "Statistik & AGP (${state.statsPeriod.label})",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            TextButton(onClick = { showAgpChart = !showAgpChart }) {
+                                Text(if (showAgpChart) "AGP ausblenden" else "AGP zeigen")
+                            }
+                        }
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            StatsPeriod.entries.forEach { period ->
+                                FilterChip(
+                                    selected = state.statsPeriod == period,
+                                    onClick = { onSelectStatsPeriod(period) },
+                                    label = { Text(period.label) },
+                                )
+                            }
+                        }
                         if (stats.count == 0) {
                             Text(
-                                "Noch keine Messwerte in den letzten 24 Stunden.",
+                                "Noch keine Messwerte im Zeitraum ${state.statsPeriod.label}.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = scheme.onSurfaceVariant,
                             )
@@ -151,7 +182,7 @@ fun HistoryScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
                                 Text(
-                                    "Tief: ${stats.veryLowPercent.toInt() + stats.lowPercent.toInt()} %",
+                                    "Tief: ${(stats.veryLowPercent + stats.lowPercent).toInt()} %",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = glucoseColors.low,
                                 )
@@ -162,16 +193,35 @@ fun HistoryScreen(
                                     color = glucoseColors.inRange,
                                 )
                                 Text(
-                                    "Hoch: ${stats.highPercent.toInt() + stats.veryHighPercent.toInt()} %",
+                                    "Hoch: ${(stats.highPercent + stats.veryHighPercent).toInt()} %",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = glucoseColors.high,
                                 )
                             }
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                StatPill("Ø ${GlucoseUnit.formatValue(stats.meanMgdl, settings.useMgdl)}")
+                                StatPill("GMI ${String.format(Locale.US, "%.1f%%", stats.gmiPercent)}")
+                                StatPill("SD ${GlucoseUnit.formatSpread(stats.sdMgdl, settings.useMgdl)}")
+                                StatPill("CV ${stats.cvPercent.toInt()}%")
+                                StatPill("Abdeckung ${extStats.dataCapturePercent.toInt()}%")
+                            }
                             Text(
-                                "Min: ${GlucoseUnit.formatValue(stats.minMgdl, settings.useMgdl)} · Max: ${GlucoseUnit.formatValue(stats.maxMgdl, settings.useMgdl)} ${GlucoseUnit.unitLabel(settings.useMgdl)} · ${stats.count} Werte · ${treatments.size} Einträge",
+                                "Min: ${GlucoseUnit.formatValue(stats.minMgdl, settings.useMgdl)} · Max: ${GlucoseUnit.formatValue(stats.maxMgdl, settings.useMgdl)} ${GlucoseUnit.unitLabel(settings.useMgdl)} · ${stats.count} Werte",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = scheme.onSurfaceVariant,
                             )
+                            if (showAgpChart) {
+                                Spacer(Modifier.height(4.dp))
+                                PercentileChart(
+                                    buckets = extStats.agpBuckets,
+                                    useMgdl = settings.useMgdl,
+                                    targetLowMgdl = settings.targetLowMgdl,
+                                    targetHighMgdl = settings.targetHighMgdl,
+                                )
+                            }
                         }
                     }
                 }
@@ -259,6 +309,10 @@ fun HistoryScreen(
                         Card(
                             shape = RoundedCornerShape(18.dp),
                             colors = CardDefaults.cardColors(containerColor = scheme.secondaryContainer.copy(alpha = 0.55f)),
+                            modifier = Modifier.clickable {
+                                editingTreatment = t
+                                showTreatmentSheet = true
+                            },
                         ) {
                             Row(
                                 modifier = Modifier
@@ -313,11 +367,31 @@ fun HistoryScreen(
     if (showTreatmentSheet) {
         TreatmentEditorSheet(
             useMgdl = settings.useMgdl,
-            onDismiss = { showTreatmentSheet = false },
+            initialEntry = editingTreatment,
+            onDismiss = {
+                showTreatmentSheet = false
+                editingTreatment = null
+            },
             onSave = { entry ->
                 onAddTreatment(entry)
                 showTreatmentSheet = false
+                editingTreatment = null
             },
+        )
+    }
+}
+
+@Composable
+private fun StatPill(text: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = RoundedCornerShape(999.dp),
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

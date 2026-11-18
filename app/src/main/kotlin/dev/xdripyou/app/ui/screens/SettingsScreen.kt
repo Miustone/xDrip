@@ -106,29 +106,29 @@ private val settingsCategories = listOf(
     SettingsCategoryMeta(
         section = SettingsSection.SOURCES,
         title = "Datenquellen & Sensor",
-        subtitle = "CamAPS FX, alle Companion-Apps, Berechtigungen, Sensor-Ablauf",
-        keywords = "camaps dexcom libre guardian aidex companion notification listener benutzerrechte sensor start ablauf veraltet stale jam paket",
+        subtitle = "CamAPS FX, Companion-Apps, Broadcast-Empfang, Sensor-Ablauf",
+        keywords = "camaps dexcom libre guardian aidex companion broadcast empfang notification listener benutzerrechte sensor start ablauf veraltet stale jam paket",
         icon = Icons.Rounded.Sensors,
     ),
     SettingsCategoryMeta(
         section = SettingsSection.ALARMS,
         title = "Alarme, Ton & Sprachausgabe",
-        subtitle = "Klingelton, Ansteigend-Optionen, Blitz, Anruf- & Stale-Schutz, TTS",
-        keywords = "alarm ton klingelton ringtone sprachausgabe tts vorlesen anruf telefonat stumm dnd stale veraltet vibration blitz taschenlampe wake",
+        subtitle = "Klingelton, Broadcast-Snooze, Ansteigend-Optionen, Blitz, TTS",
+        keywords = "alarm ton klingelton ringtone sprachausgabe tts vorlesen broadcast snooze anruf telefonat stumm dnd stale veraltet vibration blitz taschenlampe wake",
         icon = Icons.Rounded.NotificationsActive,
     ),
     SettingsCategoryMeta(
         section = SettingsSection.DISPLAY,
-        title = "Anzeige, Chart & Material 3 You",
-        subtitle = "Einheit, Zielbereich, Chart-Stil, Statuszeile, Nachttisch-Modus",
-        keywords = "mgdl mmol einheit zielbereich chart punkte gitter durchschnitt y-achse vorhersage treatment statuszeile dynamic color material you theme hell dunkel bildschirm wach",
+        title = "Anzeige, IOB/COB & Material 3 You",
+        subtitle = "Einheit, Zielbereich, IOB/COB-Wirkung, Chart-Stil, Nachttisch-Modus",
+        keywords = "mgdl mmol einheit zielbereich iob cob insulin kohlenhydrate dia chart punkte gitter durchschnitt y-achse vorhersage treatment statuszeile dynamic color material you theme hell dunkel bildschirm wach",
         icon = Icons.Rounded.Palette,
     ),
     SettingsCategoryMeta(
         section = SettingsSection.CLOUD,
-        title = "Cloud, Broadcast & Backup",
-        subtitle = "Nightscout Follower & Upload, AAPS-Broadcast, Vorhaltung, CSV & JSON",
-        keywords = "nightscout follower upload secret wifi wlan treatments aaps broadcast paket widget vorhaltung tage csv json export import backup",
+        title = "Cloud, Web-Service & Backup",
+        subtitle = "Nightscout, xDrip Web-Service (17580), AAPS-Broadcast, CSV & JSON",
+        keywords = "nightscout follower upload secret wifi wlan treatments aaps broadcast webservice server 17580 sgv pebble paket widget vorhaltung tage csv json export import backup",
         icon = Icons.Rounded.CloudSync,
     ),
     SettingsCategoryMeta(
@@ -178,6 +178,10 @@ fun SettingsScreen(
     onSyncNightscoutNow: ((String) -> Unit) -> Unit,
     onSetLocalBroadcastEnabled: (Boolean) -> Unit,
     onSetBroadcastTargetPackage: (String) -> Unit,
+    onSetAcceptLocalBroadcastReadings: (Boolean) -> Unit,
+    onSetBroadcastSnoozeConfig: (Boolean, Boolean) -> Unit,
+    onSetIobCobConfig: (Boolean, Int, Int, Int, Int) -> Unit,
+    onSetLocalWebServiceConfig: (Boolean, Boolean, String) -> Unit,
     onSetRetentionDays: (Int) -> Unit,
     onExportJson: () -> Unit,
     onImportJson: () -> Unit,
@@ -221,6 +225,7 @@ fun SettingsScreen(
             onStartSensorSession = onStartSensorSession,
             onStopSensorSession = onStopSensorSession,
             onSetSensorExpiryConfig = onSetSensorExpiryConfig,
+            onSetAcceptLocalBroadcastReadings = onSetAcceptLocalBroadcastReadings,
             modifier = modifier,
         )
         SettingsSection.ALARMS -> SettingsAlarmsOptionsPage(
@@ -237,6 +242,7 @@ fun SettingsScreen(
             onSetFlashTorchOnAlert = onSetFlashTorchOnAlert,
             onSetSpeechConfig = onSetSpeechConfig,
             onTestSpeech = onTestSpeech,
+            onSetBroadcastSnoozeConfig = onSetBroadcastSnoozeConfig,
             modifier = modifier,
         )
         SettingsSection.DISPLAY -> SettingsDisplayPage(
@@ -248,6 +254,7 @@ fun SettingsScreen(
             onSetChartVisualOptions = onSetChartVisualOptions,
             onSetShowExtraStatusLine = onSetShowExtraStatusLine,
             onSetKeepScreenOn = onSetKeepScreenOn,
+            onSetIobCobConfig = onSetIobCobConfig,
             onSetDynamicColor = onSetDynamicColor,
             onSetThemeMode = onSetThemeMode,
             modifier = modifier,
@@ -259,6 +266,7 @@ fun SettingsScreen(
             onSyncNightscoutNow = onSyncNightscoutNow,
             onSetLocalBroadcastEnabled = onSetLocalBroadcastEnabled,
             onSetBroadcastTargetPackage = onSetBroadcastTargetPackage,
+            onSetLocalWebServiceConfig = onSetLocalWebServiceConfig,
             onSetRetentionDays = onSetRetentionDays,
             onExportJson = onExportJson,
             onImportJson = onImportJson,
@@ -440,6 +448,7 @@ private fun SettingsSourcesPage(
     onStartSensorSession: () -> Unit,
     onStopSensorSession: () -> Unit,
     onSetSensorExpiryConfig: (Int, Boolean) -> Unit,
+    onSetAcceptLocalBroadcastReadings: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -481,6 +490,12 @@ private fun SettingsSourcesPage(
                         "Zusätzlich zu CamAPS FX auch Dexcom G6/G7/ONE, Guardian/Simplera, Eversense & Aidex",
                         settings.includeAllCompanionApps,
                         onSetIncludeAllCompanion,
+                    )
+                    SwitchRow(
+                        "Lokalen xDrip-Broadcast empfangen",
+                        "Übernimmt BgEstimate-Broadcasts von Juggluco/AAPS/anderen xDrip-Apps",
+                        settings.acceptLocalBroadcastReadings,
+                        onSetAcceptLocalBroadcastReadings,
                     )
 
                     Text("Quell-Einheit", style = MaterialTheme.typography.labelLarge, color = scheme.onSurfaceVariant)
@@ -582,6 +597,7 @@ private fun SettingsAlarmsOptionsPage(
     onSetFlashTorchOnAlert: (Boolean) -> Unit,
     onSetSpeechConfig: (Boolean, Boolean, Boolean, Double) -> Unit,
     onTestSpeech: () -> Unit,
+    onSetBroadcastSnoozeConfig: (Boolean, Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val settings = state.settings
@@ -640,6 +656,18 @@ private fun SettingsAlarmsOptionsPage(
                     SwitchRow("Display bei Alarm aufwecken", null, settings.wakePhoneDuringAlerts, onSetWakePhoneDuringAlerts)
                     SwitchRow("Kamerablitz-Puls bei Alarm", "Zwei kurze Lichtimpulse beim Auslösen", settings.flashTorchOnAlert, onSetFlashTorchOnAlert)
                     SwitchRow("Während Telefonaten stumm", "Unterdrückt Ton & Vibration bei aktivem Gespräch", settings.noAlarmsDuringCalls, onSetNoAlarmsDuringCalls)
+                    SwitchRow(
+                        "Snooze per Broadcast senden",
+                        "Informiert andere Apps (z. B. AAPS), wenn ein Alarm hier geschlummert wird",
+                        settings.broadcastSnoozeEnabled,
+                        { onSetBroadcastSnoozeConfig(it, settings.acceptBroadcastSnooze) },
+                    )
+                    SwitchRow(
+                        "Broadcast-Snooze akzeptieren",
+                        "Schlummert aktive Alarme bei eingehendem xDrip-Snooze-Broadcast",
+                        settings.acceptBroadcastSnooze,
+                        { onSetBroadcastSnoozeConfig(settings.broadcastSnoozeEnabled, it) },
+                    )
                     SwitchRow(
                         "Keine Alarme bei veralteten Daten",
                         "Sperrt Schwellwertalarme, wenn Messwerte älter als ${settings.disableAlertsStaleMinutes} Min. sind",
@@ -702,6 +730,7 @@ private fun SettingsDisplayPage(
     onSetChartVisualOptions: (Boolean, Boolean, Boolean, Int) -> Unit,
     onSetShowExtraStatusLine: (Boolean) -> Unit,
     onSetKeepScreenOn: (Boolean) -> Unit,
+    onSetIobCobConfig: (Boolean, Int, Int, Int, Int) -> Unit,
     onSetDynamicColor: (Boolean) -> Unit,
     onSetThemeMode: (ThemeModeOption) -> Unit,
     modifier: Modifier = Modifier,
@@ -785,6 +814,87 @@ private fun SettingsDisplayPage(
             Card(shape = RoundedCornerShape(24.dp)) {
                 Column(
                     modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("Insulin & Kohlenhydrate (IOB / COB)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    SwitchRow(
+                        "IOB & COB berechnen & anzeigen",
+                        "Zeigt aktives Insulin (IE) und offene KH (g) in Übersicht & Status",
+                        settings.showIobCob,
+                        {
+                            onSetIobCobConfig(
+                                it,
+                                settings.insulinDurationMinutes,
+                                settings.insulinPeakMinutes,
+                                settings.carbDelayMinutes,
+                                settings.carbAbsorptionGramsPerHour,
+                            )
+                        },
+                    )
+                    if (settings.showIobCob) {
+                        Text(
+                            "Insulin-Wirkdauer (DIA): ${String.format(Locale.US, "%.1f", settings.insulinDurationMinutes / 60.0)} Std. (${settings.insulinDurationMinutes} Min.)",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Slider(
+                            value = settings.insulinDurationMinutes.toFloat(),
+                            onValueChange = {
+                                onSetIobCobConfig(
+                                    true,
+                                    it.roundToInt(),
+                                    settings.insulinPeakMinutes,
+                                    settings.carbDelayMinutes,
+                                    settings.carbAbsorptionGramsPerHour,
+                                )
+                            },
+                            valueRange = 180f..420f,
+                            steps = 7,
+                        )
+                        Text("Insulin-Profil (Peak)", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf(45 to "Ultra-Schnell (45m)", 65 to "Schnell (65m)", 85 to "Klassisch (85m)").forEach { (peak, label) ->
+                                FilterChip(
+                                    selected = settings.insulinPeakMinutes == peak,
+                                    onClick = {
+                                        onSetIobCobConfig(
+                                            true,
+                                            settings.insulinDurationMinutes,
+                                            peak,
+                                            settings.carbDelayMinutes,
+                                            settings.carbAbsorptionGramsPerHour,
+                                        )
+                                    },
+                                    label = { Text(label) },
+                                )
+                            }
+                        }
+                        Text(
+                            "KH-Aufnahme: ${settings.carbAbsorptionGramsPerHour} g/Std. (Verzögerung: ${settings.carbDelayMinutes} Min.)",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Slider(
+                            value = settings.carbAbsorptionGramsPerHour.toFloat(),
+                            onValueChange = {
+                                onSetIobCobConfig(
+                                    true,
+                                    settings.insulinDurationMinutes,
+                                    settings.insulinPeakMinutes,
+                                    settings.carbDelayMinutes,
+                                    it.roundToInt(),
+                                )
+                            },
+                            valueRange = 15f..60f,
+                            steps = 8,
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text("Material 3 You Design", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -813,6 +923,7 @@ private fun SettingsCloudPage(
     onSyncNightscoutNow: ((String) -> Unit) -> Unit,
     onSetLocalBroadcastEnabled: (Boolean) -> Unit,
     onSetBroadcastTargetPackage: (String) -> Unit,
+    onSetLocalWebServiceConfig: (Boolean, Boolean, String) -> Unit,
     onSetRetentionDays: (Int) -> Unit,
     onExportJson: () -> Unit,
     onImportJson: () -> Unit,
@@ -824,6 +935,7 @@ private fun SettingsCloudPage(
     var nsUrlText by remember(settings.nightscoutUrl) { mutableStateOf(settings.nightscoutUrl) }
     var nsSecretText by remember(settings.nightscoutApiSecret) { mutableStateOf(settings.nightscoutApiSecret) }
     var targetPkgText by remember(settings.broadcastTargetPackage) { mutableStateOf(settings.broadcastTargetPackage) }
+    var webSecretText by remember(settings.localWebServiceSecret) { mutableStateOf(settings.localWebServiceSecret) }
     var nsFeedback by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
@@ -912,6 +1024,55 @@ private fun SettingsCloudPage(
                             modifier = Modifier.weight(1f),
                         )
                         OutlinedButton(onClick = { onSetBroadcastTargetPackage(targetPkgText) }) { Text("OK") }
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("Lokaler xDrip Web-Service (Port 17580)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    SwitchRow(
+                        "Lokaler Web-Service aktiv",
+                        "Stellt /sgv.json, /status.json, /treatments.json & /pebble lokal bereit",
+                        settings.localWebServiceEnabled,
+                        { onSetLocalWebServiceConfig(it, settings.localWebServiceOpenNetwork, webSecretText) },
+                    )
+                    if (settings.localWebServiceEnabled) {
+                        SwitchRow(
+                            "Im gesamten WLAN öffnen (0.0.0.0)",
+                            "Aus = nur auf diesem Gerät (127.0.0.1)",
+                            settings.localWebServiceOpenNetwork,
+                            { onSetLocalWebServiceConfig(true, it, webSecretText) },
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            OutlinedTextField(
+                                value = webSecretText,
+                                onValueChange = { webSecretText = it },
+                                label = { Text("Optional: api-secret Schutz") },
+                                visualTransformation = PasswordVisualTransformation(),
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                            OutlinedButton(
+                                onClick = {
+                                    onSetLocalWebServiceConfig(true, settings.localWebServiceOpenNetwork, webSecretText)
+                                },
+                            ) { Text("OK") }
+                        }
+                        Text(
+                            "Endpunkte: http://127.0.0.1:17580/sgv.json · /pebble · /status.json · /treatments.json",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = scheme.onSurfaceVariant,
+                        )
                     }
                 }
             }

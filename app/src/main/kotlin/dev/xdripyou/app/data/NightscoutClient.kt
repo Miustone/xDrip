@@ -57,6 +57,44 @@ object NightscoutClient {
         return out
     }
 
+    fun parseTreatmentsJson(jsonText: String): List<TreatmentEntry> {
+        val array = JSONArray(jsonText)
+        val out = mutableListOf<TreatmentEntry>()
+        for (i in 0 until array.length()) {
+            val obj = array.optJSONObject(i) ?: continue
+            val createdStr = obj.optString("created_at", "")
+            val timestampMs = obj.optLong("mills", -1L).takeIf { it > 0L }
+                ?: createdStr.takeIf { it.isNotBlank() }?.let {
+                    runCatching { Instant.parse(it).toEpochMilli() }.getOrNull()
+                }
+                ?: continue
+            val insulin = obj.optDouble("insulin", 0.0).let { if (it.isNaN() || it < 0.0) 0.0 else it }
+            val carbs = obj.optDouble("carbs", 0.0).let { if (it.isNaN() || it < 0.0) 0.0 else it }
+            val glucoseRaw = obj.optDouble("glucose", Double.NaN)
+            val units = obj.optString("units", "mg/dl").lowercase()
+            val bgMgdl = if (!glucoseRaw.isNaN() && glucoseRaw > 0.0) {
+                if (units.contains("mmol") || glucoseRaw < 35.0) glucoseRaw * 18.0182 else glucoseRaw
+            } else {
+                null
+            }
+            val note = obj.optString("notes", "").trim()
+            val eventType = obj.optString("eventType", "Note").ifBlank { "Note" }
+            if (insulin <= 0.0 && carbs <= 0.0 && bgMgdl == null && note.isBlank()) continue
+            out.add(
+                TreatmentEntry(
+                    timestampMs = timestampMs,
+                    insulinUnits = insulin,
+                    carbsGrams = carbs,
+                    bloodGlucoseMgdl = bgMgdl,
+                    note = note,
+                    eventType = eventType,
+                    syncedNightscout = true,
+                )
+            )
+        }
+        return out
+    }
+
     fun readingToNightscoutJson(reading: GlucoseReading): JSONObject = JSONObject().apply {
         put("type", "sgv")
         put("sgv", reading.mgdl.roundToInt())
@@ -103,6 +141,36 @@ object NightscoutClient {
                 }
                 val body = conn.inputStream.bufferedReader().use { it.readText() }
                 parseEntriesJson(body)
+            } finally {
+                conn.disconnect()
+            }
+        }
+    }
+
+    suspend fun fetchLatestTreatments(
+        baseUrl: String,
+        apiSecret: String,
+        count: Int = 36,
+    ): Result<List<TreatmentEntry>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val base = normalizeBaseUrl(baseUrl)
+            require(base.isNotBlank()) { "Nightscout-URL fehlt" }
+            val conn = (URL("$base/api/v1/treatments.json?count=$count").openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 10_000
+                readTimeout = 10_000
+                setRequestProperty("Accept", "application/json")
+                if (apiSecret.isNotBlank()) {
+                    setRequestProperty("api-secret", sha1Hex(apiSecret.trim()))
+                }
+            }
+            try {
+                val code = conn.responseCode
+                if (code !in 200..299) {
+                    error("Nightscout HTTP $code")
+                }
+                val body = conn.inputStream.bufferedReader().use { it.readText() }
+                parseTreatmentsJson(body)
             } finally {
                 conn.disconnect()
             }

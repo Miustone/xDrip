@@ -14,8 +14,8 @@ android {
         minSdk = 26
         targetSdk = 34
         // Versioning Scheme: YY.MM.AppVersion -> versionCode = YY * 10000 + MM * 100 + AppVersion
-        versionCode = 261104
-        versionName = "26.11.4"
+        versionCode = 261105
+        versionName = "26.11.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

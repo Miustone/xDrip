@@ -258,6 +258,42 @@ fun OverviewScreen(
                         }
 
                         Spacer(Modifier.height(12.dp))
+                        val iobCob = state.iobCob
+                        if (iobCob.hasActiveIob || iobCob.hasActiveCob) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(bottom = 10.dp),
+                            ) {
+                                if (iobCob.hasActiveIob) {
+                                    Surface(
+                                        color = scheme.primaryContainer,
+                                        shape = RoundedCornerShape(999.dp),
+                                    ) {
+                                        Text(
+                                            text = "IOB ${String.format(Locale.US, "%.2f", iobCob.iobUnits)} IE",
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = scheme.onPrimaryContainer,
+                                        )
+                                    }
+                                }
+                                if (iobCob.hasActiveCob) {
+                                    Surface(
+                                        color = scheme.secondaryContainer,
+                                        shape = RoundedCornerShape(999.dp),
+                                    ) {
+                                        Text(
+                                            text = "COB ${iobCob.cobGrams.toInt()} g",
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = scheme.onSecondaryContainer,
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,

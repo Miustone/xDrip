@@ -37,18 +37,35 @@ import dev.xdripyou.app.domain.TreatmentEntry
 @Composable
 fun TreatmentEditorSheet(
     useMgdl: Boolean,
+    initialEntry: TreatmentEntry? = null,
     onDismiss: () -> Unit,
     onSave: (TreatmentEntry) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val eventTypes = listOf("Meal Bolus", "Correction Bolus", "Carb Correction", "Note")
 
-    var eventType by remember { mutableStateOf("Meal Bolus") }
-    var insulinText by remember { mutableStateOf("") }
-    var carbsText by remember { mutableStateOf("") }
-    var bgText by remember { mutableStateOf("") }
-    var noteText by remember { mutableStateOf("") }
-    var offsetMinutes by remember { mutableIntStateOf(0) }
+    var eventType by remember(initialEntry) {
+        mutableStateOf(initialEntry?.eventType?.takeIf { it in eventTypes } ?: "Meal Bolus")
+    }
+    var insulinText by remember(initialEntry) {
+        mutableStateOf(initialEntry?.insulinUnits?.takeIf { it > 0.0 }?.toString() ?: "")
+    }
+    var carbsText by remember(initialEntry) {
+        mutableStateOf(
+            initialEntry?.carbsGrams?.takeIf { it > 0.0 }?.let {
+                if (it % 1.0 == 0.0) it.toInt().toString() else it.toString()
+            } ?: ""
+        )
+    }
+    var bgText by remember(initialEntry) {
+        mutableStateOf(
+            initialEntry?.bloodGlucoseMgdl?.takeIf { it > 0.0 }?.let {
+                GlucoseUnit.formatValue(it, useMgdl)
+            } ?: ""
+        )
+    }
+    var noteText by remember(initialEntry) { mutableStateOf(initialEntry?.note ?: "") }
+    var offsetMinutes by remember(initialEntry) { mutableIntStateOf(0) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -63,7 +80,7 @@ fun TreatmentEditorSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = "Therapie-Eintrag hinzufügen",
+                text = if (initialEntry == null) "Therapie-Eintrag hinzufügen" else "Therapie-Eintrag bearbeiten",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
             )
@@ -120,18 +137,20 @@ fun TreatmentEditorSheet(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            Text(
-                text = "Zeitpunkt",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(0 to "Jetzt", 10 to "vor 10m", 20 to "vor 20m", 30 to "vor 30m").forEach { (mins, label) ->
-                    FilterChip(
-                        selected = offsetMinutes == mins,
-                        onClick = { offsetMinutes = mins },
-                        label = { Text(label) },
-                    )
+            if (initialEntry == null) {
+                Text(
+                    text = "Zeitpunkt",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0 to "Jetzt", 10 to "vor 10m", 20 to "vor 20m", 30 to "vor 30m").forEach { (mins, label) ->
+                        FilterChip(
+                            selected = offsetMinutes == mins,
+                            onClick = { offsetMinutes = mins },
+                            label = { Text(label) },
+                        )
+                    }
                 }
             }
 
@@ -152,12 +171,14 @@ fun TreatmentEditorSheet(
                         }
                         onSave(
                             TreatmentEntry(
-                                timestampMs = System.currentTimeMillis() - offsetMinutes * 60_000L,
+                                id = initialEntry?.id ?: 0L,
+                                timestampMs = initialEntry?.timestampMs ?: (System.currentTimeMillis() - offsetMinutes * 60_000L),
                                 insulinUnits = insulin,
                                 carbsGrams = carbs,
                                 bloodGlucoseMgdl = bgMgdl,
                                 note = noteText.trim(),
                                 eventType = eventType,
+                                syncedNightscout = false,
                             )
                         )
                     },

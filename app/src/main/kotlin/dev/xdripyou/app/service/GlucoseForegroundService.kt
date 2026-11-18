@@ -30,6 +30,7 @@ class GlucoseForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val app = application as XdripYouApplication
         serviceScope.launch {
+            app.localWebServer.syncWithSettings(app.repository.settingsStore.current())
             val notif = app.alertEngine.buildOngoingNotification()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(

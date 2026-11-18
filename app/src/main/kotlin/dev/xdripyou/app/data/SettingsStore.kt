@@ -132,6 +132,17 @@ class SettingsStore(context: Context) {
         nightscoutUrl = this[Keys.NS_URL] ?: "",
         nightscoutApiSecret = this[Keys.NS_API_SECRET] ?: "",
         retentionDays = this[Keys.RETENTION_DAYS] ?: 90,
+        showIobCob = this[Keys.SHOW_IOB_COB] ?: true,
+        insulinDurationMinutes = this[Keys.INSULIN_DURATION_MINUTES] ?: 270,
+        insulinPeakMinutes = this[Keys.INSULIN_PEAK_MINUTES] ?: 65,
+        carbDelayMinutes = this[Keys.CARB_DELAY_MINUTES] ?: 15,
+        carbAbsorptionGramsPerHour = this[Keys.CARB_ABSORPTION_G_PER_H] ?: 30,
+        localWebServiceEnabled = this[Keys.LOCAL_WEB_SERVICE_ENABLED] ?: false,
+        localWebServiceOpenNetwork = this[Keys.LOCAL_WEB_SERVICE_OPEN] ?: false,
+        localWebServiceSecret = this[Keys.LOCAL_WEB_SERVICE_SECRET] ?: "",
+        acceptLocalBroadcastReadings = this[Keys.ACCEPT_LOCAL_BROADCAST_READINGS] ?: false,
+        broadcastSnoozeEnabled = this[Keys.BROADCAST_SNOOZE_ENABLED] ?: false,
+        acceptBroadcastSnooze = this[Keys.ACCEPT_BROADCAST_SNOOZE] ?: false,
         dynamicColorEnabled = this[Keys.DYNAMIC_COLOR] ?: true,
         themeMode = ThemeModeOption.fromWire(this[Keys.THEME_MODE]),
     )
@@ -209,6 +220,17 @@ class SettingsStore(context: Context) {
         val NS_URL = stringPreferencesKey("ns_url")
         val NS_API_SECRET = stringPreferencesKey("ns_api_secret")
         val RETENTION_DAYS = intPreferencesKey("retention_days")
+        val SHOW_IOB_COB = booleanPreferencesKey("show_iob_cob")
+        val INSULIN_DURATION_MINUTES = intPreferencesKey("insulin_duration_minutes")
+        val INSULIN_PEAK_MINUTES = intPreferencesKey("insulin_peak_minutes")
+        val CARB_DELAY_MINUTES = intPreferencesKey("carb_delay_minutes")
+        val CARB_ABSORPTION_G_PER_H = intPreferencesKey("carb_absorption_g_per_h")
+        val LOCAL_WEB_SERVICE_ENABLED = booleanPreferencesKey("local_web_service_enabled")
+        val LOCAL_WEB_SERVICE_OPEN = booleanPreferencesKey("local_web_service_open")
+        val LOCAL_WEB_SERVICE_SECRET = stringPreferencesKey("local_web_service_secret")
+        val ACCEPT_LOCAL_BROADCAST_READINGS = booleanPreferencesKey("accept_local_broadcast_readings")
+        val BROADCAST_SNOOZE_ENABLED = booleanPreferencesKey("broadcast_snooze_enabled")
+        val ACCEPT_BROADCAST_SNOOZE = booleanPreferencesKey("accept_broadcast_snooze")
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val THEME_MODE = stringPreferencesKey("theme_mode")
 

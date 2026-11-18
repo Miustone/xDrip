@@ -11,6 +11,8 @@ import dev.xdripyou.app.domain.AlertRule
 import dev.xdripyou.app.domain.CamApsParser
 import dev.xdripyou.app.domain.CollectorEvent
 import dev.xdripyou.app.domain.GlucoseReading
+import dev.xdripyou.app.domain.IobCobCalculator
+import dev.xdripyou.app.domain.IobCobSnapshot
 import dev.xdripyou.app.domain.TreatmentEntry
 import dev.xdripyou.app.domain.TrendArrow
 import kotlinx.coroutines.flow.Flow
@@ -50,6 +52,18 @@ class GlucoseRepository(
 
     suspend fun getLatestReadings(limit: Int): List<GlucoseReading> =
         db.bgReadingDao().getLatest(limit).map { it.toDomain() }
+
+    suspend fun getReadingsSince(sinceMs: Long, limit: Int = 30_000): List<GlucoseReading> =
+        db.bgReadingDao().getSince(sinceMs, limit).map { it.toDomain() }
+
+    suspend fun getTreatmentsSince(sinceMs: Long, limit: Int = 500): List<TreatmentEntry> =
+        db.treatmentDao().getSince(sinceMs, limit).map { it.toDomain() }
+
+    suspend fun currentIobCob(atMs: Long = System.currentTimeMillis()): IobCobSnapshot {
+        val settings = settingsStore.current()
+        val recent = db.treatmentDao().getSince(atMs - 12 * 3_600_000L, 200).map { it.toDomain() }
+        return IobCobCalculator.snapshot(recent, atMs, settings)
+    }
 
     suspend fun addOrUpdateTreatment(entry: TreatmentEntry): Long =
         db.treatmentDao().upsert(TreatmentEntity.fromDomain(entry))
@@ -159,6 +173,7 @@ class GlucoseRepository(
         }
 
         var pulled = 0
+        var pulledTreatments = 0
         var uploadedReadings = 0
         var uploadedTreatments = 0
 
@@ -177,6 +192,23 @@ class GlucoseRepository(
                     syncedNightscout = true,
                 )
                 if (out is InsertOutcome.Inserted) pulled++
+            }
+
+            val trRes = NightscoutClient.fetchLatestTreatments(settings.nightscoutUrl, settings.nightscoutApiSecret, count = 36)
+            if (trRes.isSuccess) {
+                val existing = db.treatmentDao().getLatest(200).map { it.toDomain() }
+                for (remote in trRes.getOrThrow()) {
+                    val duplicate = existing.any { local ->
+                        kotlin.math.abs(local.timestampMs - remote.timestampMs) <= 60_000L &&
+                            kotlin.math.abs(local.insulinUnits - remote.insulinUnits) < 0.01 &&
+                            kotlin.math.abs(local.carbsGrams - remote.carbsGrams) < 0.1 &&
+                            local.note == remote.note
+                    }
+                    if (!duplicate) {
+                        db.treatmentDao().upsert(TreatmentEntity.fromDomain(remote))
+                        pulledTreatments++
+                    }
+                }
             }
         }
 
@@ -208,7 +240,7 @@ class GlucoseRepository(
             }
         }
 
-        return Result.success("Sync OK (↓ $pulled Werte, ↑ $uploadedReadings Werte / $uploadedTreatments Einträge)")
+        return Result.success("Sync OK (↓ $pulled Werte / $pulledTreatments Eintr., ↑ $uploadedReadings Werte / $uploadedTreatments Eintr.)")
     }
 
     suspend fun exportBackupJson(): String {
