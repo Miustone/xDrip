@@ -67,8 +67,10 @@ class SettingsStore(context: Context) {
     suspend fun setLastPersistentHighAlertMs(ts: Long) = update { it[Keys.LAST_PERSISTENT_HIGH_ALERT_MS] = ts }
 
     private fun Preferences.toAppSettings(): AppSettings = AppSettings(
+        onboardingCompleted = this[Keys.ONBOARDING_COMPLETED] ?: false,
         useMgdl = this[Keys.USE_MGDL] ?: true,
         collectorEnabled = this[Keys.COLLECTOR_ENABLED] ?: true,
+        includeAllCompanionApps = this[Keys.INCLUDE_ALL_COMPANION] ?: false,
         sourceUnitMode = SourceUnitMode.fromWire(this[Keys.SOURCE_UNIT_MODE]),
         jamProtection = this[Keys.JAM_PROTECTION] ?: true,
         foregroundServiceEnabled = this[Keys.FOREGROUND_SERVICE] ?: true,
@@ -76,13 +78,25 @@ class SettingsStore(context: Context) {
         customPackages = this[Keys.CUSTOM_PACKAGES] ?: "",
         staleThresholdMinutes = this[Keys.STALE_THRESHOLD_MINUTES] ?: 11,
         sensorStartedAtMs = this[Keys.SENSOR_STARTED_AT_MS] ?: 0L,
+        sensorExpectedDays = this[Keys.SENSOR_EXPECTED_DAYS] ?: 14,
+        sensorExpiryAlertEnabled = this[Keys.SENSOR_EXPIRY_ALERT] ?: false,
         smartSnoozing = this[Keys.SMART_SNOOZING] ?: true,
         smartAlerting = this[Keys.SMART_ALERTING] ?: true,
+        delayAscending3Min = this[Keys.DELAY_ASCENDING_3MIN] ?: true,
+        ascendingToMedium = this[Keys.ASCENDING_TO_MEDIUM] ?: false,
+        startAlertsSnoozed = this[Keys.START_ALERTS_SNOOZED] ?: false,
+        showButtonsInAlerts = this[Keys.SHOW_BUTTONS_IN_ALERTS] ?: true,
+        wakePhoneDuringAlerts = this[Keys.WAKE_PHONE_DURING_ALERTS] ?: false,
+        flashTorchOnAlert = this[Keys.FLASH_TORCH_ON_ALERT] ?: false,
         noAlarmsDuringCalls = this[Keys.NO_ALARMS_DURING_CALLS] ?: true,
         disableAlertsStaleData = this[Keys.DISABLE_ALERTS_STALE] ?: false,
         disableAlertsStaleMinutes = this[Keys.DISABLE_ALERTS_STALE_MINUTES] ?: 15,
         defaultAlertSoundUri = this[Keys.DEFAULT_ALERT_SOUND_URI] ?: "",
         alertProfile = AlertProfile.fromWire(this[Keys.ALERT_PROFILE]),
+        speakReadingsEnabled = this[Keys.SPEAK_READINGS] ?: false,
+        speakAlertsEnabled = this[Keys.SPEAK_ALERTS] ?: false,
+        speakTrendEnabled = this[Keys.SPEAK_TREND] ?: true,
+        speechSpeed = this[Keys.SPEECH_SPEED] ?: 1.0,
         missedReadingEnabled = this[Keys.MISSED_ENABLED] ?: true,
         missedReadingMinutes = this[Keys.MISSED_MINUTES] ?: 20,
         missedReadingSnoozeMinutes = this[Keys.MISSED_SNOOZE_MINUTES] ?: 20,
@@ -103,12 +117,21 @@ class SettingsStore(context: Context) {
         targetHighMgdl = this[Keys.TARGET_HIGH] ?: 180.0,
         predictionCurveEnabled = this[Keys.PREDICTION_CURVE] ?: true,
         showChartTreatments = this[Keys.SHOW_CHART_TREATMENTS] ?: true,
+        chartPointsOnly = this[Keys.CHART_POINTS_ONLY] ?: false,
+        showChartGrid = this[Keys.SHOW_CHART_GRID] ?: true,
+        showChartAverageLine = this[Keys.SHOW_CHART_AVG_LINE] ?: false,
+        chartMaxMgdl = this[Keys.CHART_MAX_MGDL] ?: 0,
+        showExtraStatusLine = this[Keys.SHOW_EXTRA_STATUS_LINE] ?: true,
         keepScreenOn = this[Keys.KEEP_SCREEN_ON] ?: false,
         localBroadcastEnabled = this[Keys.LOCAL_BROADCAST] ?: true,
+        broadcastTargetPackage = this[Keys.BROADCAST_TARGET_PACKAGE] ?: "",
         nightscoutFollowEnabled = this[Keys.NS_FOLLOW_ENABLED] ?: false,
         nightscoutUploadEnabled = this[Keys.NS_UPLOAD_ENABLED] ?: false,
+        nightscoutUploadTreatments = this[Keys.NS_UPLOAD_TREATMENTS] ?: true,
+        nightscoutWifiOnly = this[Keys.NS_WIFI_ONLY] ?: false,
         nightscoutUrl = this[Keys.NS_URL] ?: "",
         nightscoutApiSecret = this[Keys.NS_API_SECRET] ?: "",
+        retentionDays = this[Keys.RETENTION_DAYS] ?: 90,
         dynamicColorEnabled = this[Keys.DYNAMIC_COLOR] ?: true,
         themeMode = ThemeModeOption.fromWire(this[Keys.THEME_MODE]),
     )
@@ -121,8 +144,10 @@ class SettingsStore(context: Context) {
     )
 
     object Keys {
+        val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val USE_MGDL = booleanPreferencesKey("use_mgdl")
         val COLLECTOR_ENABLED = booleanPreferencesKey("collector_enabled")
+        val INCLUDE_ALL_COMPANION = booleanPreferencesKey("include_all_companion")
         val SOURCE_UNIT_MODE = stringPreferencesKey("source_unit_mode")
         val JAM_PROTECTION = booleanPreferencesKey("jam_protection")
         val FOREGROUND_SERVICE = booleanPreferencesKey("foreground_service")
@@ -130,13 +155,25 @@ class SettingsStore(context: Context) {
         val CUSTOM_PACKAGES = stringPreferencesKey("custom_packages")
         val STALE_THRESHOLD_MINUTES = intPreferencesKey("stale_threshold_minutes")
         val SENSOR_STARTED_AT_MS = longPreferencesKey("sensor_started_at_ms")
+        val SENSOR_EXPECTED_DAYS = intPreferencesKey("sensor_expected_days")
+        val SENSOR_EXPIRY_ALERT = booleanPreferencesKey("sensor_expiry_alert")
         val SMART_SNOOZING = booleanPreferencesKey("smart_snoozing")
         val SMART_ALERTING = booleanPreferencesKey("smart_alerting")
+        val DELAY_ASCENDING_3MIN = booleanPreferencesKey("delay_ascending_3min")
+        val ASCENDING_TO_MEDIUM = booleanPreferencesKey("ascending_to_medium")
+        val START_ALERTS_SNOOZED = booleanPreferencesKey("start_alerts_snoozed")
+        val SHOW_BUTTONS_IN_ALERTS = booleanPreferencesKey("show_buttons_in_alerts")
+        val WAKE_PHONE_DURING_ALERTS = booleanPreferencesKey("wake_phone_during_alerts")
+        val FLASH_TORCH_ON_ALERT = booleanPreferencesKey("flash_torch_on_alert")
         val NO_ALARMS_DURING_CALLS = booleanPreferencesKey("no_alarms_during_calls")
         val DISABLE_ALERTS_STALE = booleanPreferencesKey("disable_alerts_stale")
         val DISABLE_ALERTS_STALE_MINUTES = intPreferencesKey("disable_alerts_stale_minutes")
         val DEFAULT_ALERT_SOUND_URI = stringPreferencesKey("default_alert_sound_uri")
         val ALERT_PROFILE = stringPreferencesKey("alert_profile")
+        val SPEAK_READINGS = booleanPreferencesKey("speak_readings")
+        val SPEAK_ALERTS = booleanPreferencesKey("speak_alerts")
+        val SPEAK_TREND = booleanPreferencesKey("speak_trend")
+        val SPEECH_SPEED = doublePreferencesKey("speech_speed")
         val MISSED_ENABLED = booleanPreferencesKey("missed_enabled")
         val MISSED_MINUTES = intPreferencesKey("missed_minutes")
         val MISSED_SNOOZE_MINUTES = intPreferencesKey("missed_snooze_minutes")
@@ -157,12 +194,21 @@ class SettingsStore(context: Context) {
         val TARGET_HIGH = doublePreferencesKey("target_high")
         val PREDICTION_CURVE = booleanPreferencesKey("prediction_curve")
         val SHOW_CHART_TREATMENTS = booleanPreferencesKey("show_chart_treatments")
+        val CHART_POINTS_ONLY = booleanPreferencesKey("chart_points_only")
+        val SHOW_CHART_GRID = booleanPreferencesKey("show_chart_grid")
+        val SHOW_CHART_AVG_LINE = booleanPreferencesKey("show_chart_avg_line")
+        val CHART_MAX_MGDL = intPreferencesKey("chart_max_mgdl")
+        val SHOW_EXTRA_STATUS_LINE = booleanPreferencesKey("show_extra_status_line")
         val KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
         val LOCAL_BROADCAST = booleanPreferencesKey("local_broadcast")
+        val BROADCAST_TARGET_PACKAGE = stringPreferencesKey("broadcast_target_package")
         val NS_FOLLOW_ENABLED = booleanPreferencesKey("ns_follow_enabled")
         val NS_UPLOAD_ENABLED = booleanPreferencesKey("ns_upload_enabled")
+        val NS_UPLOAD_TREATMENTS = booleanPreferencesKey("ns_upload_treatments")
+        val NS_WIFI_ONLY = booleanPreferencesKey("ns_wifi_only")
         val NS_URL = stringPreferencesKey("ns_url")
         val NS_API_SECRET = stringPreferencesKey("ns_api_secret")
+        val RETENTION_DAYS = intPreferencesKey("retention_days")
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val THEME_MODE = stringPreferencesKey("theme_mode")
 

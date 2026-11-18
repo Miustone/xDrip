@@ -18,11 +18,15 @@ object XdripBroadcastSender {
     const val EXTRA_TIMESTAMP = "com.eveningoutpost.dexdrip.Extras.Time"
     const val EXTRA_DISPLAY_UNITS = "com.eveningoutpost.dexdrip.Extras.Display.Units"
 
-    fun sendReading(context: Context, reading: GlucoseReading, useMgdl: Boolean) {
+    fun sendReading(
+        context: Context,
+        reading: GlucoseReading,
+        useMgdl: Boolean,
+        targetPackage: String = "",
+    ) {
         val bundle = Bundle().apply {
             putString(EXTRA_SENDER, "xDrip 2 You")
             putDouble(EXTRA_BG_ESTIMATE, reading.mgdl)
-            // xDrip expects slope in mg/dL per millisecond
             putDouble(EXTRA_BG_SLOPE, reading.slopePerMin / 60_000.0)
             putString(EXTRA_BG_SLOPE_NAME, reading.trend.wireName)
             putLong(EXTRA_TIMESTAMP, reading.timestampMs)
@@ -31,6 +35,7 @@ object XdripBroadcastSender {
         val intent = Intent(ACTION_NEW_BG_ESTIMATE).apply {
             putExtras(bundle)
             addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+            targetPackage.trim().takeIf { it.isNotEmpty() }?.let { setPackage(it) }
         }
         context.sendBroadcast(intent)
     }

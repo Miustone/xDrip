@@ -61,6 +61,10 @@ fun GlucoseChart(
     useMgdl: Boolean,
     targetLowMgdl: Double,
     targetHighMgdl: Double,
+    pointsOnly: Boolean = false,
+    showGrid: Boolean = true,
+    showAverageLine: Boolean = false,
+    chartMaxMgdl: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -174,7 +178,11 @@ fun GlucoseChart(
                 readings.maxOfOrNull { it.mgdl } ?: 220.0,
                 predictions.maxOfOrNull { it.mgdl } ?: 220.0,
             )
-            val maxY = max(240.0, (ceil(maxObserved / 40.0) * 40.0).coerceIn(240.0, 400.0))
+            val maxY = if (chartMaxMgdl in 200..400) {
+                chartMaxMgdl.toDouble()
+            } else {
+                max(240.0, (ceil(maxObserved / 40.0) * 40.0).coerceIn(240.0, 400.0))
+            }
 
             fun xForMs(ms: Long): Float {
                 val t = ((ms - startMs).toDouble() / totalSpanMs.toDouble()).coerceIn(0.0, 1.0)
@@ -233,7 +241,7 @@ fun GlucoseChart(
                         strokeWidth = 2.5f,
                         pathEffect = dashEffect,
                     )
-                } else {
+                } else if (showGrid) {
                     drawLine(
                         color = scheme.outlineVariant.copy(alpha = 0.45f),
                         start = Offset(chartLeft, y),
@@ -290,6 +298,19 @@ fun GlucoseChart(
                 return@Canvas
             }
 
+            // 4b. Average line if enabled
+            if (showAverageLine && readings.isNotEmpty()) {
+                val avgMgdl = readings.map { it.mgdl }.average()
+                val avgY = yForMgdl(avgMgdl)
+                drawLine(
+                    color = scheme.secondary.copy(alpha = 0.7f),
+                    start = Offset(chartLeft, avgY),
+                    end = Offset(chartRight, avgY),
+                    strokeWidth = 2f,
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 6f), 0f),
+                )
+            }
+
             // 5. Treatment markers along bottom of chart
             val treatLabelPaint = Paint().apply {
                 color = scheme.primary.toArgb()
@@ -327,23 +348,25 @@ fun GlucoseChart(
 
             // 6. Curve + points (chronological)
             val sorted = readings.asReversed()
-            val path = Path()
-            var started = false
-            for (i in sorted.indices) {
-                val r = sorted[i]
-                val pt = Offset(xForMs(r.timestampMs), yForMgdl(r.mgdl))
-                if (!started || (i > 0 && r.timestampMs - sorted[i - 1].timestampMs > 1_200_000L)) {
-                    path.moveTo(pt.x, pt.y)
-                    started = true
-                } else {
-                    path.lineTo(pt.x, pt.y)
+            if (!pointsOnly) {
+                val path = Path()
+                var started = false
+                for (i in sorted.indices) {
+                    val r = sorted[i]
+                    val pt = Offset(xForMs(r.timestampMs), yForMgdl(r.mgdl))
+                    if (!started || (i > 0 && r.timestampMs - sorted[i - 1].timestampMs > 1_200_000L)) {
+                        path.moveTo(pt.x, pt.y)
+                        started = true
+                    } else {
+                        path.lineTo(pt.x, pt.y)
+                    }
                 }
+                drawPath(
+                    path = path,
+                    color = scheme.primary.copy(alpha = 0.55f),
+                    style = Stroke(width = 4.5f, cap = StrokeCap.Round),
+                )
             }
-            drawPath(
-                path = path,
-                color = scheme.primary.copy(alpha = 0.55f),
-                style = Stroke(width = 4.5f, cap = StrokeCap.Round),
-            )
 
             // 7. Prediction dashed curve
             if (predictions.isNotEmpty() && sorted.isNotEmpty()) {

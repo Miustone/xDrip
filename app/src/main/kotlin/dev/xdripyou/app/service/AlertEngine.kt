@@ -5,12 +5,15 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -27,6 +30,7 @@ import dev.xdripyou.app.domain.GlucosePredictor
 import dev.xdripyou.app.domain.GlucoseReading
 import dev.xdripyou.app.domain.GlucoseUnit
 import dev.xdripyou.app.widget.GlucoseWidgetProvider
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.math.max
@@ -36,6 +40,7 @@ import kotlin.math.roundToInt
 class AlertEngine(
     private val context: Context,
     private val repository: GlucoseRepository,
+    private val speechHelper: SpeechHelper,
 ) {
     private val mutex = Mutex()
 
@@ -44,6 +49,7 @@ class AlertEngine(
     private var previousVolume: Int? = null
     private var appliedVolume: Int? = null
     private var appliedStream: Int? = null
+    private var lastSensorExpiryNoticeMs: Long = 0L
 
     suspend fun buildOngoingNotification(): Notification {
         NotificationChannels.ensureAll(context)
@@ -113,7 +119,21 @@ class AlertEngine(
         val now = System.currentTimeMillis()
 
         if (settings.localBroadcastEnabled) {
-            XdripBroadcastSender.sendReading(context, latest, settings.useMgdl)
+            XdripBroadcastSender.sendReading(
+                context = context,
+                reading = latest,
+                useMgdl = settings.useMgdl,
+                targetPackage = settings.broadcastTargetPackage,
+            )
+        }
+
+        if (settings.speakReadingsEnabled) {
+            speechHelper.speakReading(
+                reading = latest,
+                useMgdl = settings.useMgdl,
+                includeTrend = settings.speakTrendEnabled,
+                speed = settings.speechSpeed.toFloat(),
+            )
         }
 
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -154,6 +174,23 @@ class AlertEngine(
 
         if (active == null || active.kind != "threshold") {
             if (settings.smartAlerting && AlertEvaluator.isTrendingToAlertEnd(recent, matched.isHigh, now)) {
+                return@withLock
+            }
+            if (settings.startAlertsSnoozed) {
+                val nextAt = now + matched.minutesBetween.coerceAtLeast(1) * 60_000L
+                repository.saveActiveAlert(
+                    ActiveAlertState(
+                        ruleUuid = matched.uuid,
+                        ruleName = matched.name,
+                        isHigh = matched.isHigh,
+                        isSnoozed = true,
+                        alertStartedAtMs = now,
+                        lastAlertedAtMs = 0L,
+                        nextAlertAtMs = nextAt,
+                        triggerMgdl = latest.mgdl,
+                        kind = "threshold",
+                    )
+                )
                 return@withLock
             }
             triggerRuleAlertLocked(settings, matched, latest.mgdl, now, minutesAlerting = 0)
@@ -222,6 +259,32 @@ class AlertEngine(
                 }
             }
         }
+
+        if (settings.sensorExpiryAlertEnabled && settings.sensorStartedAtMs > 0L) {
+            val totalMs = settings.sensorExpectedDays * 86_400_000L
+            val remainingMs = (settings.sensorStartedAtMs + totalMs) - now
+            if (remainingMs <= 12 * 3_600_000L && now - lastSensorExpiryNoticeMs >= 6 * 3_600_000L) {
+                lastSensorExpiryNoticeMs = now
+                postSensorExpiryNotification((remainingMs / 3_600_000L).toInt())
+            }
+        }
+    }
+
+    private fun postSensorExpiryNotification(hoursRemaining: Int) {
+        val body = if (hoursRemaining <= 0) {
+            "Dein Sensor hat das geplante Laufzeitende erreicht."
+        } else {
+            "Dein Sensor läuft in ca. $hoursRemaining Std. ab."
+        }
+        val notif = NotificationCompat.Builder(context, NotificationChannels.MISSED_ALERTS)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("Sensor-Wechsel Erinnerung")
+            .setContentText(body)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .build()
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify(NOTIF_ID_SENSOR_EXPIRY, notif)
     }
 
     private suspend fun evaluateSecondaryAlertsLocked(
@@ -358,11 +421,31 @@ class AlertEngine(
         val title = "$formatted $unitLabel · ${rule.name}"
         val body = "Blutzucker $directionLabel (Schwelle: $thresholdFormatted $unitLabel)"
 
+        val rawAscending = if (settings.delayAscending3Min) {
+            ((effectiveMinutes - 2) / 3.0f).coerceIn(0.0f, 1.0f)
+        } else {
+            ((effectiveMinutes * 0.1667f) + 0.3333f).coerceIn(0.0f, 1.0f)
+        }
+        val cappedAscending = if (settings.ascendingToMedium) min(rawAscending, 0.7f) else rawAscending
+
         val volumeFrac = when (effectiveProfile) {
             AlertProfile.HIGH -> 1.0f
             AlertProfile.MEDIUM -> 0.7f
-            AlertProfile.ASCENDING -> min(1.0f, max(0.2f, (effectiveMinutes * 0.16f) + 0.2f))
+            AlertProfile.ASCENDING -> cappedAscending
             AlertProfile.VIBRATE, AlertProfile.SILENT -> 0.0f
+        }
+
+        if (settings.wakePhoneDuringAlerts) {
+            wakeScreenBriefly()
+        }
+        if (settings.flashTorchOnAlert) {
+            pulseTorch()
+        }
+        if (settings.speakAlertsEnabled) {
+            speechHelper.speakText(
+                "$directionLabel, $formatted ${if (settings.useMgdl) "mg dL" else "mmol"}",
+                settings.speechSpeed.toFloat(),
+            )
         }
 
         postAlertNotification(
@@ -374,6 +457,7 @@ class AlertEngine(
             defaultSnoozeMins = rule.defaultSnoozeMinutes,
             soundUri = rule.soundUri ?: settings.defaultAlertSoundUri.takeIf { it.isNotBlank() },
             noAlarmsDuringCalls = settings.noAlarmsDuringCalls,
+            showButtons = settings.showButtonsInAlerts,
         )
     }
 
@@ -480,6 +564,7 @@ class AlertEngine(
         defaultSnoozeMins: Int,
         soundUri: String? = null,
         noAlarmsDuringCalls: Boolean = true,
+        showButtons: Boolean = true,
     ) {
         val openIntent = PendingIntent.getActivity(
             context,
@@ -516,8 +601,12 @@ class AlertEngine(
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setAutoCancel(false)
             .setContentIntent(openIntent)
-            .addAction(0, "Schlummern (${defaultSnoozeMins}m)", snoozeIntent)
-            .addAction(0, "Stopp", stopIntent)
+
+        if (showButtons) {
+            builder
+                .addAction(0, "Schlummern (${defaultSnoozeMins}m)", snoozeIntent)
+                .addAction(0, "Stopp", stopIntent)
+        }
 
         if (overrideSilent) {
             builder.setFullScreenIntent(openIntent, true)
@@ -651,10 +740,38 @@ class AlertEngine(
         }
     }
 
+    private fun wakeScreenBriefly() {
+        runCatching {
+            val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+            @Suppress("DEPRECATION")
+            val wl = pm.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "xdrip2you:alert_wake",
+            )
+            wl.acquire(6_000L)
+        }
+    }
+
+    private suspend fun pulseTorch() {
+        runCatching {
+            val cm = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            val cameraId = cm.cameraIdList.firstOrNull { id ->
+                cm.getCameraCharacteristics(id).get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+            } ?: return
+            repeat(2) {
+                cm.setTorchMode(cameraId, true)
+                delay(220L)
+                cm.setTorchMode(cameraId, false)
+                delay(180L)
+            }
+        }
+    }
+
     companion object {
         const val NOTIF_ID_ONGOING = 1001
         const val NOTIF_ID_ALERT = 1002
         const val NOTIF_ID_MISSED = 1003
+        const val NOTIF_ID_SENSOR_EXPIRY = 1004
         private const val URGENT_LOW_UUID = "c5f1999c-4ec5-449e-adad-3980b172b920"
     }
 }

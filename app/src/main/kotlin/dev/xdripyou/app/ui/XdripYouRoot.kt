@@ -1,6 +1,8 @@
 package dev.xdripyou.app.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -8,6 +10,7 @@ import androidx.compose.material.icons.automirrored.rounded.ShowChart
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,10 +29,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import dev.xdripyou.app.ui.screens.AlertsScreen
 import dev.xdripyou.app.ui.screens.HistoryScreen
+import dev.xdripyou.app.ui.screens.OnboardingWizard
 import dev.xdripyou.app.ui.screens.OverviewScreen
 import dev.xdripyou.app.ui.screens.SettingsScreen
 import dev.xdripyou.app.ui.screens.SettingsSection
@@ -44,11 +49,43 @@ fun XdripYouRoot(
     onRequestPostNotifications: () -> Unit,
     onRequestBatteryExemption: () -> Unit,
     onOpenDndPolicy: () -> Unit,
+    onOpenExactAlarms: () -> Unit,
     onPickAlertRingtone: () -> Unit,
     onExportJson: () -> Unit,
     onImportJson: () -> Unit,
     onExportCsv: () -> Unit,
 ) {
+    if (!state.isLoaded) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+
+    if (!state.settings.onboardingCompleted) {
+        OnboardingWizard(
+            state = state,
+            onSetUseMgdl = viewModel::setUseMgdl,
+            onSetTargetRange = viewModel::setTargetRange,
+            onSetDynamicColor = viewModel::setDynamicColor,
+            onSetThemeMode = viewModel::setThemeMode,
+            onSetSourceConfig = { collectorEnabled, includeAll, nsUrl, nsSecret, nsFollow ->
+                viewModel.setCollectorEnabled(collectorEnabled)
+                viewModel.setIncludeAllCompanionApps(includeAll)
+                viewModel.setNightscoutConfig(nsUrl, nsSecret, nsFollow, state.settings.nightscoutUploadEnabled)
+            },
+            onRequestPostNotifications = onRequestPostNotifications,
+            onOpenNotificationListener = onOpenNotificationListener,
+            onRequestBatteryExemption = onRequestBatteryExemption,
+            onOpenDndPolicy = onOpenDndPolicy,
+            onOpenExactAlarms = onOpenExactAlarms,
+            onSetMissedReading = viewModel::setMissedReading,
+            onStartSensor = viewModel::startSensorSession,
+            onFinish = viewModel::completeOnboarding,
+        )
+        return
+    }
+
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var settingsSection by rememberSaveable { mutableStateOf(SettingsSection.HUB) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -162,11 +199,14 @@ fun XdripYouRoot(
                 section = settingsSection,
                 onSelectSection = { settingsSection = it },
                 state = state,
+                onReopenOnboarding = viewModel::reopenOnboarding,
                 onOpenNotificationListener = onOpenNotificationListener,
                 onRequestPostNotifications = onRequestPostNotifications,
                 onRequestBatteryExemption = onRequestBatteryExemption,
                 onOpenDndPolicy = onOpenDndPolicy,
+                onOpenExactAlarms = onOpenExactAlarms,
                 onSetCollectorEnabled = viewModel::setCollectorEnabled,
+                onSetIncludeAllCompanion = viewModel::setIncludeAllCompanionApps,
                 onSetForegroundService = viewModel::setForegroundService,
                 onSetCompactOngoing = viewModel::setCompactOngoing,
                 onSetSourceUnitMode = viewModel::setSourceUnitMode,
@@ -175,11 +215,20 @@ fun XdripYouRoot(
                 onSetStaleThresholdMinutes = viewModel::setStaleThresholdMinutes,
                 onStartSensorSession = viewModel::startSensorSession,
                 onStopSensorSession = viewModel::stopSensorSession,
+                onSetSensorExpiryConfig = viewModel::setSensorExpiryConfig,
                 onPickAlertRingtone = onPickAlertRingtone,
                 onResetAlertRingtone = { viewModel.setDefaultAlertSoundUri("") },
                 onSetNoAlarmsDuringCalls = viewModel::setNoAlarmsDuringCalls,
                 onSetDisableAlertsStale = viewModel::setDisableAlertsStaleData,
+                onSetAscendingOptions = viewModel::setAscendingOptions,
+                onSetStartAlertsSnoozed = viewModel::setStartAlertsSnoozed,
+                onSetShowButtonsInAlerts = viewModel::setShowButtonsInAlerts,
+                onSetWakePhoneDuringAlerts = viewModel::setWakePhoneDuringAlerts,
+                onSetFlashTorchOnAlert = viewModel::setFlashTorchOnAlert,
+                onSetSpeechConfig = viewModel::setSpeechConfig,
+                onTestSpeech = viewModel::testSpeech,
                 onSetNightscoutConfig = viewModel::setNightscoutConfig,
+                onSetNightscoutExtraConfig = viewModel::setNightscoutExtraConfig,
                 onSyncNightscoutNow = { cb ->
                     viewModel.syncNightscoutNow { msg ->
                         cb(msg)
@@ -187,6 +236,8 @@ fun XdripYouRoot(
                     }
                 },
                 onSetLocalBroadcastEnabled = viewModel::setLocalBroadcastEnabled,
+                onSetBroadcastTargetPackage = viewModel::setBroadcastTargetPackage,
+                onSetRetentionDays = viewModel::setRetentionDays,
                 onExportJson = onExportJson,
                 onImportJson = onImportJson,
                 onExportCsv = onExportCsv,
@@ -198,6 +249,8 @@ fun XdripYouRoot(
                 onSetTargetRange = viewModel::setTargetRange,
                 onSetPredictionCurve = viewModel::setPredictionCurveEnabled,
                 onSetShowChartTreatments = viewModel::setShowChartTreatments,
+                onSetChartVisualOptions = viewModel::setChartVisualOptions,
+                onSetShowExtraStatusLine = viewModel::setShowExtraStatusLine,
                 onSetKeepScreenOn = viewModel::setKeepScreenOn,
                 onSetDynamicColor = viewModel::setDynamicColor,
                 onSetThemeMode = viewModel::setThemeMode,

@@ -125,6 +125,9 @@ class MainActivity : ComponentActivity() {
                     onOpenDndPolicy = {
                         SystemPermissionsHelper.openDndPolicySettings(this)
                     },
+                    onOpenExactAlarms = {
+                        SystemPermissionsHelper.openExactAlarmSettings(this)
+                    },
                     onPickAlertRingtone = {
                         val existing = state.settings.defaultAlertSoundUri.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
                         val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {

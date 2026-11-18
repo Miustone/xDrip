@@ -193,16 +193,18 @@ class GlucoseRepository(
                 uploadedReadings = unsyncedReadings.size
             }
 
-            val unsyncedTreatments = db.treatmentDao().getUnsynced(50)
-            if (unsyncedTreatments.isNotEmpty()) {
-                val res = NightscoutClient.uploadTreatments(
-                    settings.nightscoutUrl,
-                    settings.nightscoutApiSecret,
-                    unsyncedTreatments.map { it.toDomain() },
-                )
-                if (res.isFailure) return Result.failure(res.exceptionOrNull()!!)
-                db.treatmentDao().markSynced(unsyncedTreatments.map { it.id })
-                uploadedTreatments = unsyncedTreatments.size
+            if (settings.nightscoutUploadTreatments) {
+                val unsyncedTreatments = db.treatmentDao().getUnsynced(50)
+                if (unsyncedTreatments.isNotEmpty()) {
+                    val res = NightscoutClient.uploadTreatments(
+                        settings.nightscoutUrl,
+                        settings.nightscoutApiSecret,
+                        unsyncedTreatments.map { it.toDomain() },
+                    )
+                    if (res.isFailure) return Result.failure(res.exceptionOrNull()!!)
+                    db.treatmentDao().markSynced(unsyncedTreatments.map { it.id })
+                    uploadedTreatments = unsyncedTreatments.size
+                }
             }
         }
 
@@ -308,11 +310,23 @@ class GlucoseRepository(
         settingsStore.resetCompanionJamState()
     }
 
+    suspend fun pruneExpiredReadings() {
+        val days = settingsStore.current().retentionDays.coerceIn(7, 3650)
+        val cutoff = System.currentTimeMillis() - days * 86_400_000L
+        db.bgReadingDao().deleteOlderThan(cutoff)
+    }
+
     suspend fun getWatchedPackages(): Set<String> {
-        val custom = settingsStore.current().customPackages
+        val settings = settingsStore.current()
+        val base = if (settings.includeAllCompanionApps) {
+            CamApsParser.extendedCompanionPackages
+        } else {
+            CamApsParser.defaultCamApsPackages
+        }
+        val custom = settings.customPackages
             .split(',', ';', '\n')
             .map { it.trim() }
             .filter { it.isNotEmpty() }
-        return CamApsParser.defaultCamApsPackages + custom
+        return base + custom
     }
 }

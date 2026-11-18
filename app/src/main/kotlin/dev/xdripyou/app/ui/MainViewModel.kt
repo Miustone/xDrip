@@ -33,6 +33,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 data class MainUiState(
+    val isLoaded: Boolean = false,
     val settings: AppSettings = AppSettings(),
     val readings24h: List<GlucoseReading> = emptyList(),
     val treatments24h: List<TreatmentEntry> = emptyList(),
@@ -93,6 +94,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repo = app.repository
     private val settingsStore = app.settingsStore
     private val alertEngine = app.alertEngine
+    private val speechHelper = app.speechHelper
 
     private val chartWindowFlow = MutableStateFlow(ChartWindow.SIX_HOURS)
     private val permissionsFlow = MutableStateFlow(SystemPermissionsHelper.getStatus(app))
@@ -118,6 +120,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         nowMsFlow,
     ) { primary, events, window, perms, nowMs ->
         MainUiState(
+            isLoaded = true,
             settings = primary.settings,
             readings24h = primary.readings,
             treatments24h = primary.treatments,
@@ -147,6 +150,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshPermissions() {
         permissionsFlow.value = SystemPermissionsHelper.getStatus(app)
         nowMsFlow.value = System.currentTimeMillis()
+    }
+
+    fun completeOnboarding(seedDemo: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.ONBOARDING_COMPLETED] = true }
+            if (seedDemo && repo.getLatestReadings(1).isEmpty()) {
+                repo.seedDemoCurve()
+            }
+            if (settingsStore.current().foregroundServiceEnabled && SystemPermissionsHelper.hasPostNotifications(app)) {
+                GlucoseForegroundService.start(app)
+            }
+            nowMsFlow.value = System.currentTimeMillis()
+            alertEngine.refreshOngoingNotification()
+        }
+    }
+
+    fun reopenOnboarding() {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.ONBOARDING_COMPLETED] = false }
+        }
     }
 
     fun selectWindow(window: ChartWindow) {
@@ -181,6 +204,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setBroadcastTargetPackage(pkg: String) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.BROADCAST_TARGET_PACKAGE] = pkg.trim() }
+        }
+    }
+
     fun setDynamicColor(enabled: Boolean) {
         viewModelScope.launch {
             settingsStore.update { it[SettingsStore.Keys.DYNAMIC_COLOR] = enabled }
@@ -196,6 +225,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setCollectorEnabled(enabled: Boolean) {
         viewModelScope.launch {
             settingsStore.update { it[SettingsStore.Keys.COLLECTOR_ENABLED] = enabled }
+        }
+    }
+
+    fun setIncludeAllCompanionApps(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.INCLUDE_ALL_COMPANION] = enabled }
         }
     }
 
@@ -253,6 +288,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setSensorExpiryConfig(expectedDays: Int, alertEnabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.SENSOR_EXPECTED_DAYS] = expectedDays.coerceIn(7, 30)
+                it[SettingsStore.Keys.SENSOR_EXPIRY_ALERT] = alertEnabled
+            }
+        }
+    }
+
     fun setNoAlarmsDuringCalls(enabled: Boolean) {
         viewModelScope.launch {
             settingsStore.update { it[SettingsStore.Keys.NO_ALARMS_DURING_CALLS] = enabled }
@@ -274,9 +318,95 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setAscendingOptions(delay3Min: Boolean, capMedium: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.DELAY_ASCENDING_3MIN] = delay3Min
+                it[SettingsStore.Keys.ASCENDING_TO_MEDIUM] = capMedium
+            }
+        }
+    }
+
+    fun setStartAlertsSnoozed(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.START_ALERTS_SNOOZED] = enabled }
+        }
+    }
+
+    fun setShowButtonsInAlerts(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.SHOW_BUTTONS_IN_ALERTS] = enabled }
+        }
+    }
+
+    fun setWakePhoneDuringAlerts(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.WAKE_PHONE_DURING_ALERTS] = enabled }
+        }
+    }
+
+    fun setFlashTorchOnAlert(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.FLASH_TORCH_ON_ALERT] = enabled }
+        }
+    }
+
+    fun setSpeechConfig(
+        speakReadings: Boolean,
+        speakAlerts: Boolean,
+        speakTrend: Boolean,
+        speed: Double,
+    ) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.SPEAK_READINGS] = speakReadings
+                it[SettingsStore.Keys.SPEAK_ALERTS] = speakAlerts
+                it[SettingsStore.Keys.SPEAK_TREND] = speakTrend
+                it[SettingsStore.Keys.SPEECH_SPEED] = speed.coerceIn(0.6, 1.6)
+            }
+        }
+    }
+
+    fun testSpeech() {
+        val current = uiState.value
+        val latest = current.latestReading
+        if (latest != null) {
+            speechHelper.speakReading(
+                reading = latest,
+                useMgdl = current.settings.useMgdl,
+                includeTrend = current.settings.speakTrendEnabled,
+                speed = current.settings.speechSpeed.toFloat(),
+            )
+        } else {
+            speechHelper.speakText("xDrip 2 You Sprachausgabe aktiv.", current.settings.speechSpeed.toFloat())
+        }
+    }
+
     fun setShowChartTreatments(enabled: Boolean) {
         viewModelScope.launch {
             settingsStore.update { it[SettingsStore.Keys.SHOW_CHART_TREATMENTS] = enabled }
+        }
+    }
+
+    fun setChartVisualOptions(
+        pointsOnly: Boolean,
+        showGrid: Boolean,
+        showAverageLine: Boolean,
+        chartMaxMgdl: Int,
+    ) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.CHART_POINTS_ONLY] = pointsOnly
+                it[SettingsStore.Keys.SHOW_CHART_GRID] = showGrid
+                it[SettingsStore.Keys.SHOW_CHART_AVG_LINE] = showAverageLine
+                it[SettingsStore.Keys.CHART_MAX_MGDL] = chartMaxMgdl
+            }
+        }
+    }
+
+    fun setShowExtraStatusLine(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.SHOW_EXTRA_STATUS_LINE] = enabled }
         }
     }
 
@@ -365,6 +495,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 it[SettingsStore.Keys.NS_FOLLOW_ENABLED] = followEnabled
                 it[SettingsStore.Keys.NS_UPLOAD_ENABLED] = uploadEnabled
             }
+        }
+    }
+
+    fun setNightscoutExtraConfig(uploadTreatments: Boolean, wifiOnly: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.NS_UPLOAD_TREATMENTS] = uploadTreatments
+                it[SettingsStore.Keys.NS_WIFI_ONLY] = wifiOnly
+            }
+        }
+    }
+
+    fun setRetentionDays(days: Int) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.RETENTION_DAYS] = days.coerceIn(7, 3650) }
+            repo.pruneExpiredReadings()
         }
     }
 

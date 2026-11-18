@@ -78,14 +78,20 @@ data class PermissionStatus(
     val postNotificationsGranted: Boolean = false,
     val ignoringBatteryOptimizations: Boolean = false,
     val dndPolicyAccessGranted: Boolean = false,
+    val canScheduleExactAlarms: Boolean = true,
 ) {
     val coreReady: Boolean
         get() = notificationListenerEnabled && postNotificationsGranted
+
+    val allRecommendedGranted: Boolean
+        get() = coreReady && ignoringBatteryOptimizations && dndPolicyAccessGranted && canScheduleExactAlarms
 }
 
 data class AppSettings(
+    val onboardingCompleted: Boolean = false,
     val useMgdl: Boolean = true,
     val collectorEnabled: Boolean = true,
+    val includeAllCompanionApps: Boolean = false,
     val sourceUnitMode: SourceUnitMode = SourceUnitMode.AUTO,
     val jamProtection: Boolean = true,
     val foregroundServiceEnabled: Boolean = true,
@@ -93,13 +99,25 @@ data class AppSettings(
     val customPackages: String = "",
     val staleThresholdMinutes: Int = 11,
     val sensorStartedAtMs: Long = 0L,
+    val sensorExpectedDays: Int = 14,
+    val sensorExpiryAlertEnabled: Boolean = false,
     val smartSnoozing: Boolean = true,
     val smartAlerting: Boolean = true,
+    val delayAscending3Min: Boolean = true,
+    val ascendingToMedium: Boolean = false,
+    val startAlertsSnoozed: Boolean = false,
+    val showButtonsInAlerts: Boolean = true,
+    val wakePhoneDuringAlerts: Boolean = false,
+    val flashTorchOnAlert: Boolean = false,
     val noAlarmsDuringCalls: Boolean = true,
     val disableAlertsStaleData: Boolean = false,
     val disableAlertsStaleMinutes: Int = 15,
     val defaultAlertSoundUri: String = "",
     val alertProfile: AlertProfile = AlertProfile.ASCENDING,
+    val speakReadingsEnabled: Boolean = false,
+    val speakAlertsEnabled: Boolean = false,
+    val speakTrendEnabled: Boolean = true,
+    val speechSpeed: Double = 1.0,
     val missedReadingEnabled: Boolean = true,
     val missedReadingMinutes: Int = 20,
     val missedReadingSnoozeMinutes: Int = 20,
@@ -120,12 +138,21 @@ data class AppSettings(
     val targetHighMgdl: Double = 180.0,
     val predictionCurveEnabled: Boolean = true,
     val showChartTreatments: Boolean = true,
+    val chartPointsOnly: Boolean = false,
+    val showChartGrid: Boolean = true,
+    val showChartAverageLine: Boolean = false,
+    val chartMaxMgdl: Int = 0, // 0 = auto
+    val showExtraStatusLine: Boolean = true,
     val keepScreenOn: Boolean = false,
     val localBroadcastEnabled: Boolean = true,
+    val broadcastTargetPackage: String = "",
     val nightscoutFollowEnabled: Boolean = false,
     val nightscoutUploadEnabled: Boolean = false,
+    val nightscoutUploadTreatments: Boolean = true,
+    val nightscoutWifiOnly: Boolean = false,
     val nightscoutUrl: String = "",
     val nightscoutApiSecret: String = "",
+    val retentionDays: Int = 90,
     val dynamicColorEnabled: Boolean = true,
     val themeMode: ThemeModeOption = ThemeModeOption.SYSTEM,
 )

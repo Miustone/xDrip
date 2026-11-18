@@ -25,6 +25,32 @@ object CamApsParser {
         "com.camdiab.fx_alert.mmoll.ca",
     )
 
+    /** Extended CGM companion apps supported by xDrip's `UiBasedCollector`. */
+    val extendedCompanionPackages: Set<String> = defaultCamApsPackages + setOf(
+        "com.dexcom.g6",
+        "com.dexcom.g7",
+        "com.dexcom.dexcomone",
+        "com.dexcom.d1plus",
+        "com.dexcom.stelo",
+        "com.medtronic.diabetes.guardian",
+        "com.medtronic.diabetes.guardianconnect",
+        "com.medtronic.diabetes.minimedmobile.eu",
+        "com.medtronic.diabetes.minimedmobile.us",
+        "com.medtronic.diabetes.simplera.eu",
+        "com.senseonics.gen12androidapp",
+        "com.senseonics.androidapp",
+        "com.senseonics.eversense365.us",
+        "com.microtech.aidexx.mgdl",
+        "com.microtech.aidexx.linxneo.mmoll",
+        "com.microtech.aidexx.diaexport.mmoll",
+        "com.microtech.aidexx",
+        "com.ottai.seas",
+        "com.ottai.tag",
+        "com.sinocare.cgm.ce",
+        "com.sinocare.ican.health.ce",
+        "com.diabeloop.dblg2",
+    )
+
     private val decimalPattern = Regex("""\b([0-9]{1,2}[.,][0-9]{1,2})\b""")
     private val integerPattern = Regex("""\b([0-9]{2,3})\b""")
     private val mmolHintPattern = Regex("""mmol""", RegexOption.IGNORE_CASE)

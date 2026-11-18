@@ -23,6 +23,9 @@ interface BgReadingDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(entity: BgReadingEntity): Long
 
+    @Query("DELETE FROM bg_readings WHERE timestampMs < :cutoffMs")
+    suspend fun deleteOlderThan(cutoffMs: Long)
+
     @Query("DELETE FROM bg_readings")
     suspend fun deleteAll()
 }

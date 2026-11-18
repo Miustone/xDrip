@@ -328,6 +328,33 @@ fun OverviewScreen(
                         useMgdl = settings.useMgdl,
                         targetLowMgdl = settings.targetLowMgdl,
                         targetHighMgdl = settings.targetHighMgdl,
+                        pointsOnly = settings.chartPointsOnly,
+                        showGrid = settings.showChartGrid,
+                        showAverageLine = settings.showChartAverageLine,
+                        chartMaxMgdl = settings.chartMaxMgdl,
+                    )
+                }
+            }
+        }
+
+        if (settings.showExtraStatusLine && state.stats24h.count > 0) {
+            item {
+                val s24 = state.stats24h
+                Surface(
+                    color = scheme.surfaceContainerHigh,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = buildString {
+                            append("24h: TIR ${s24.inRangePercent.toInt()}%")
+                            append(" · Ø ${GlucoseUnit.formatValue(s24.meanMgdl, settings.useMgdl)}")
+                            append(" · GMI ${String.format(Locale.US, "%.1f", s24.gmiPercent)}%")
+                            append(" · CV ${s24.cvPercent.toInt()}%")
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = scheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                     )
                 }
             }

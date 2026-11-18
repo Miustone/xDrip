@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.RecordVoiceOver
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Sensors
 import androidx.compose.material.icons.rounded.TableView
@@ -86,9 +88,9 @@ import kotlin.math.roundToInt
 enum class SettingsSection(val title: String) {
     HUB("Optionen & Quelle"),
     SOURCES("Datenquellen & Sensor"),
-    ALARMS("Alarme & Klingeltöne"),
+    ALARMS("Alarme, Ton & Sprache"),
     DISPLAY("Anzeige & Material 3 You"),
-    CLOUD("Cloud, Broadcast & Backup"),
+    CLOUD("Cloud, Broadcast & Speicher"),
     DIAGNOSTICS("Diagnose, Labor & Info"),
 }
 
@@ -104,36 +106,36 @@ private val settingsCategories = listOf(
     SettingsCategoryMeta(
         section = SettingsSection.SOURCES,
         title = "Datenquellen & Sensor",
-        subtitle = "CamAPS FX Companion, Berechtigungen, Jam-Schutz, Sensor-Alter",
-        keywords = "camaps companion notification listener benutzerrechte sensor start veraltet stale jam paket",
+        subtitle = "CamAPS FX, alle Companion-Apps, Berechtigungen, Sensor-Ablauf",
+        keywords = "camaps dexcom libre guardian aidex companion notification listener benutzerrechte sensor start ablauf veraltet stale jam paket",
         icon = Icons.Rounded.Sensors,
     ),
     SettingsCategoryMeta(
         section = SettingsSection.ALARMS,
-        title = "Alarme & Klingeltöne",
-        subtitle = "Eigener Alarmton, Anruf-Stummschaltung, Stale-Alarm-Sperre",
-        keywords = "alarm ton klingelton ringtone anruf telefonat stumm dnd stale veraltet vibration",
+        title = "Alarme, Ton & Sprachausgabe",
+        subtitle = "Klingelton, Ansteigend-Optionen, Blitz, Anruf- & Stale-Schutz, TTS",
+        keywords = "alarm ton klingelton ringtone sprachausgabe tts vorlesen anruf telefonat stumm dnd stale veraltet vibration blitz taschenlampe wake",
         icon = Icons.Rounded.NotificationsActive,
     ),
     SettingsCategoryMeta(
         section = SettingsSection.DISPLAY,
         title = "Anzeige, Chart & Material 3 You",
-        subtitle = "Einheit (mg/dL / mmol/L), Zielbereich, Prognose, Nachttisch-Modus",
-        keywords = "mgdl mmol einheit zielbereich chart vorhersage treatment dynamic color material you theme hell dunkel bildschirm wach",
+        subtitle = "Einheit, Zielbereich, Chart-Stil, Statuszeile, Nachttisch-Modus",
+        keywords = "mgdl mmol einheit zielbereich chart punkte gitter durchschnitt y-achse vorhersage treatment statuszeile dynamic color material you theme hell dunkel bildschirm wach",
         icon = Icons.Rounded.Palette,
     ),
     SettingsCategoryMeta(
         section = SettingsSection.CLOUD,
-        title = "Cloud, Broadcast & Export",
-        subtitle = "Nightscout Follower & Upload, AAPS-Broadcast, CSV & JSON Backup",
-        keywords = "nightscout follower upload secret aaps broadcast widget csv json export import backup",
+        title = "Cloud, Broadcast & Backup",
+        subtitle = "Nightscout Follower & Upload, AAPS-Broadcast, Vorhaltung, CSV & JSON",
+        keywords = "nightscout follower upload secret wifi wlan treatments aaps broadcast paket widget vorhaltung tage csv json export import backup",
         icon = Icons.Rounded.CloudSync,
     ),
     SettingsCategoryMeta(
         section = SettingsSection.DIAGNOSTICS,
-        title = "Diagnose, Labor & Info",
-        subtitle = "Live-Protokoll, CamAPS-Simulator, Demo-Kurve, Version & Changelog",
-        keywords = "diagnose log protokoll test simulator demo version changelog fork github",
+        title = "Diagnose, Assistent & Info",
+        subtitle = "Einrichtungs-Assistent, Live-Protokoll, Simulator, Version & Changelog",
+        keywords = "diagnose log protokoll test simulator demo assistent wizard onboarding version changelog fork github",
         icon = Icons.Rounded.BugReport,
     ),
 )
@@ -143,11 +145,14 @@ fun SettingsScreen(
     section: SettingsSection,
     onSelectSection: (SettingsSection) -> Unit,
     state: MainUiState,
+    onReopenOnboarding: () -> Unit,
     onOpenNotificationListener: () -> Unit,
     onRequestPostNotifications: () -> Unit,
     onRequestBatteryExemption: () -> Unit,
     onOpenDndPolicy: () -> Unit,
+    onOpenExactAlarms: () -> Unit,
     onSetCollectorEnabled: (Boolean) -> Unit,
+    onSetIncludeAllCompanion: (Boolean) -> Unit,
     onSetForegroundService: (Boolean) -> Unit,
     onSetCompactOngoing: (Boolean) -> Unit,
     onSetSourceUnitMode: (SourceUnitMode) -> Unit,
@@ -156,13 +161,24 @@ fun SettingsScreen(
     onSetStaleThresholdMinutes: (Int) -> Unit,
     onStartSensorSession: () -> Unit,
     onStopSensorSession: () -> Unit,
+    onSetSensorExpiryConfig: (Int, Boolean) -> Unit,
     onPickAlertRingtone: () -> Unit,
     onResetAlertRingtone: () -> Unit,
     onSetNoAlarmsDuringCalls: (Boolean) -> Unit,
     onSetDisableAlertsStale: (Boolean, Int) -> Unit,
+    onSetAscendingOptions: (Boolean, Boolean) -> Unit,
+    onSetStartAlertsSnoozed: (Boolean) -> Unit,
+    onSetShowButtonsInAlerts: (Boolean) -> Unit,
+    onSetWakePhoneDuringAlerts: (Boolean) -> Unit,
+    onSetFlashTorchOnAlert: (Boolean) -> Unit,
+    onSetSpeechConfig: (Boolean, Boolean, Boolean, Double) -> Unit,
+    onTestSpeech: () -> Unit,
     onSetNightscoutConfig: (String, String, Boolean, Boolean) -> Unit,
+    onSetNightscoutExtraConfig: (Boolean, Boolean) -> Unit,
     onSyncNightscoutNow: ((String) -> Unit) -> Unit,
     onSetLocalBroadcastEnabled: (Boolean) -> Unit,
+    onSetBroadcastTargetPackage: (String) -> Unit,
+    onSetRetentionDays: (Int) -> Unit,
     onExportJson: () -> Unit,
     onImportJson: () -> Unit,
     onExportCsv: () -> Unit,
@@ -174,6 +190,8 @@ fun SettingsScreen(
     onSetTargetRange: (Double, Double) -> Unit,
     onSetPredictionCurve: (Boolean) -> Unit,
     onSetShowChartTreatments: (Boolean) -> Unit,
+    onSetChartVisualOptions: (Boolean, Boolean, Boolean, Int) -> Unit,
+    onSetShowExtraStatusLine: (Boolean) -> Unit,
     onSetKeepScreenOn: (Boolean) -> Unit,
     onSetDynamicColor: (Boolean) -> Unit,
     onSetThemeMode: (ThemeModeOption) -> Unit,
@@ -183,6 +201,7 @@ fun SettingsScreen(
         SettingsSection.HUB -> SettingsHubPage(
             state = state,
             onSelectSection = onSelectSection,
+            onReopenOnboarding = onReopenOnboarding,
             modifier = modifier,
         )
         SettingsSection.SOURCES -> SettingsSourcesPage(
@@ -190,7 +209,9 @@ fun SettingsScreen(
             onOpenNotificationListener = onOpenNotificationListener,
             onRequestPostNotifications = onRequestPostNotifications,
             onRequestBatteryExemption = onRequestBatteryExemption,
+            onOpenExactAlarms = onOpenExactAlarms,
             onSetCollectorEnabled = onSetCollectorEnabled,
+            onSetIncludeAllCompanion = onSetIncludeAllCompanion,
             onSetForegroundService = onSetForegroundService,
             onSetCompactOngoing = onSetCompactOngoing,
             onSetSourceUnitMode = onSetSourceUnitMode,
@@ -199,6 +220,7 @@ fun SettingsScreen(
             onSetStaleThresholdMinutes = onSetStaleThresholdMinutes,
             onStartSensorSession = onStartSensorSession,
             onStopSensorSession = onStopSensorSession,
+            onSetSensorExpiryConfig = onSetSensorExpiryConfig,
             modifier = modifier,
         )
         SettingsSection.ALARMS -> SettingsAlarmsOptionsPage(
@@ -208,6 +230,13 @@ fun SettingsScreen(
             onResetAlertRingtone = onResetAlertRingtone,
             onSetNoAlarmsDuringCalls = onSetNoAlarmsDuringCalls,
             onSetDisableAlertsStale = onSetDisableAlertsStale,
+            onSetAscendingOptions = onSetAscendingOptions,
+            onSetStartAlertsSnoozed = onSetStartAlertsSnoozed,
+            onSetShowButtonsInAlerts = onSetShowButtonsInAlerts,
+            onSetWakePhoneDuringAlerts = onSetWakePhoneDuringAlerts,
+            onSetFlashTorchOnAlert = onSetFlashTorchOnAlert,
+            onSetSpeechConfig = onSetSpeechConfig,
+            onTestSpeech = onTestSpeech,
             modifier = modifier,
         )
         SettingsSection.DISPLAY -> SettingsDisplayPage(
@@ -216,6 +245,8 @@ fun SettingsScreen(
             onSetTargetRange = onSetTargetRange,
             onSetPredictionCurve = onSetPredictionCurve,
             onSetShowChartTreatments = onSetShowChartTreatments,
+            onSetChartVisualOptions = onSetChartVisualOptions,
+            onSetShowExtraStatusLine = onSetShowExtraStatusLine,
             onSetKeepScreenOn = onSetKeepScreenOn,
             onSetDynamicColor = onSetDynamicColor,
             onSetThemeMode = onSetThemeMode,
@@ -224,8 +255,11 @@ fun SettingsScreen(
         SettingsSection.CLOUD -> SettingsCloudPage(
             state = state,
             onSetNightscoutConfig = onSetNightscoutConfig,
+            onSetNightscoutExtraConfig = onSetNightscoutExtraConfig,
             onSyncNightscoutNow = onSyncNightscoutNow,
             onSetLocalBroadcastEnabled = onSetLocalBroadcastEnabled,
+            onSetBroadcastTargetPackage = onSetBroadcastTargetPackage,
+            onSetRetentionDays = onSetRetentionDays,
             onExportJson = onExportJson,
             onImportJson = onImportJson,
             onExportCsv = onExportCsv,
@@ -233,6 +267,7 @@ fun SettingsScreen(
         )
         SettingsSection.DIAGNOSTICS -> SettingsDiagnosticsPage(
             state = state,
+            onReopenOnboarding = onReopenOnboarding,
             onSimulateNotification = onSimulateNotification,
             onInjectManualReading = onInjectManualReading,
             onSeedDemo = onSeedDemo,
@@ -246,6 +281,7 @@ fun SettingsScreen(
 private fun SettingsHubPage(
     state: MainUiState,
     onSelectSection: (SettingsSection) -> Unit,
+    onReopenOnboarding: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -271,7 +307,7 @@ private fun SettingsHubPage(
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                placeholder = { Text("Optionen durchsuchen (z. B. Nightscout, Klingelton)…") },
+                placeholder = { Text("Optionen durchsuchen (z. B. Nightscout, TTS, Sensor)…") },
                 leadingIcon = { Icon(Icons.Rounded.Search, null) },
                 trailingIcon = {
                     if (query.isNotEmpty()) {
@@ -307,7 +343,7 @@ private fun SettingsHubPage(
                         Spacer(Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (state.permissions.coreReady) "CamAPS FX Empfang bereit" else "Berechtigungen prüfen",
+                                text = if (state.permissions.coreReady) "Empfang & Alarme bereit" else "Berechtigungen prüfen",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                             )
@@ -322,6 +358,11 @@ private fun SettingsHubPage(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = scheme.onSurfaceVariant,
                             )
+                        }
+                        OutlinedButton(onClick = onReopenOnboarding) {
+                            Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Assistent")
                         }
                     }
                 }
@@ -387,7 +428,9 @@ private fun SettingsSourcesPage(
     onOpenNotificationListener: () -> Unit,
     onRequestPostNotifications: () -> Unit,
     onRequestBatteryExemption: () -> Unit,
+    onOpenExactAlarms: () -> Unit,
     onSetCollectorEnabled: (Boolean) -> Unit,
+    onSetIncludeAllCompanion: (Boolean) -> Unit,
     onSetForegroundService: (Boolean) -> Unit,
     onSetCompactOngoing: (Boolean) -> Unit,
     onSetSourceUnitMode: (SourceUnitMode) -> Unit,
@@ -396,6 +439,7 @@ private fun SettingsSourcesPage(
     onSetStaleThresholdMinutes: (Int) -> Unit,
     onStartSensorSession: () -> Unit,
     onStopSensorSession: () -> Unit,
+    onSetSensorExpiryConfig: (Int, Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -417,6 +461,7 @@ private fun SettingsSourcesPage(
                     StatusRow("Benachrichtigungszugriff (CamAPS)", state.permissions.notificationListenerEnabled, "Öffnen", onOpenNotificationListener)
                     StatusRow("App-Benachrichtigungen", state.permissions.postNotificationsGranted, "Erlauben", onRequestPostNotifications)
                     StatusRow("Akku-Optimierung aus", state.permissions.ignoringBatteryOptimizations, "Öffnen", onRequestBatteryExemption)
+                    StatusRow("Exakte Alarme", state.permissions.canScheduleExactAlarms, "Prüfen", onOpenExactAlarms)
                     SwitchRow("Dauerhafte Status-Benachrichtigung", "Hält Monitoring & Timer aktiv", settings.foregroundServiceEnabled, onSetForegroundService)
                     SwitchRow("Kompakte Status-Benachrichtigung", "Zeigt nur Wert, Pfeil & Delta", settings.compactOngoingNotification, onSetCompactOngoing)
                 }
@@ -429,8 +474,14 @@ private fun SettingsSourcesPage(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text("CamAPS FX Companion Parser", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    SwitchRow("CamAPS Collector aktiv", null, settings.collectorEnabled, onSetCollectorEnabled)
+                    Text("Companion Collector", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    SwitchRow("Companion Collector aktiv", null, settings.collectorEnabled, onSetCollectorEnabled)
+                    SwitchRow(
+                        "Alle xDrip Companion-Apps zulassen",
+                        "Zusätzlich zu CamAPS FX auch Dexcom G6/G7/ONE, Guardian/Simplera, Eversense & Aidex",
+                        settings.includeAllCompanionApps,
+                        onSetIncludeAllCompanion,
+                    )
 
                     Text("Quell-Einheit", style = MaterialTheme.typography.labelLarge, color = scheme.onSurfaceVariant)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -454,7 +505,7 @@ private fun SettingsSourcesPage(
                     )
 
                     Text(
-                        "Unterstützte CamAPS-Pakete: ${CamApsParser.defaultCamApsPackages.joinToString(", ")}",
+                        "CamAPS-Pakete: ${CamApsParser.defaultCamApsPackages.joinToString(", ")}",
                         style = MaterialTheme.typography.labelSmall,
                         color = scheme.onSurfaceVariant,
                     )
@@ -482,18 +533,34 @@ private fun SettingsSourcesPage(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text("Sensor-Laufzeit (Session)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Sensor-Laufzeit & Ablauf", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     if (settings.sensorStartedAtMs > 0L) {
                         val hours = ((state.nowMs - settings.sensorStartedAtMs) / 3_600_000L).coerceAtLeast(0L)
-                        Text("Aktiver Sensor: ${hours / 24} Tage, ${hours % 24} Stunden", style = MaterialTheme.typography.bodyMedium)
+                        Text("Aktiver Sensor: ${hours / 24} Tage, ${hours % 24} Stunden (Ziel: ${settings.sensorExpectedDays} Tage)", style = MaterialTheme.typography.bodyMedium)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(onClick = onStartSensorSession, modifier = Modifier.weight(1f)) { Text("Neu starten") }
                             OutlinedButton(onClick = onStopSensorSession, modifier = Modifier.weight(1f)) { Text("Stoppen") }
                         }
                     } else {
-                        Text("Optional: Startzeit deines aktuellen Sensors auf der Übersicht anzeigen.", style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
+                        Text("Optional: Startzeit deines aktuellen Sensors verfolgen.", style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
                         Button(onClick = onStartSensorSession) { Text("Sensor jetzt als gestartet markieren") }
                     }
+                    Text("Erwartete Sensor-Laufzeit", style = MaterialTheme.typography.labelLarge, color = scheme.onSurfaceVariant)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(10, 14, 15).forEach { days ->
+                            FilterChip(
+                                selected = settings.sensorExpectedDays == days,
+                                onClick = { onSetSensorExpiryConfig(days, settings.sensorExpiryAlertEnabled) },
+                                label = { Text("$days Tage") },
+                            )
+                        }
+                    }
+                    SwitchRow(
+                        "Vor Sensor-Ablauf erinnern",
+                        "Benachrichtigt ab 12 Std. vor Laufzeitende",
+                        settings.sensorExpiryAlertEnabled,
+                        { onSetSensorExpiryConfig(settings.sensorExpectedDays, it) },
+                    )
                 }
             }
         }
@@ -508,6 +575,13 @@ private fun SettingsAlarmsOptionsPage(
     onResetAlertRingtone: () -> Unit,
     onSetNoAlarmsDuringCalls: (Boolean) -> Unit,
     onSetDisableAlertsStale: (Boolean, Int) -> Unit,
+    onSetAscendingOptions: (Boolean, Boolean) -> Unit,
+    onSetStartAlertsSnoozed: (Boolean) -> Unit,
+    onSetShowButtonsInAlerts: (Boolean) -> Unit,
+    onSetWakePhoneDuringAlerts: (Boolean) -> Unit,
+    onSetFlashTorchOnAlert: (Boolean) -> Unit,
+    onSetSpeechConfig: (Boolean, Boolean, Boolean, Double) -> Unit,
+    onTestSpeech: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val settings = state.settings
@@ -554,13 +628,18 @@ private fun SettingsAlarmsOptionsPage(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text("Schutzregeln", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    SwitchRow(
-                        "Während Telefonaten stumm",
-                        "Unterdrückt akustische Alarme & Vibration bei aktivem Gespräch",
-                        settings.noAlarmsDuringCalls,
-                        onSetNoAlarmsDuringCalls,
-                    )
+                    Text("Feineinstellungen & Schutzregeln", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    SwitchRow("Ansteigend erst nach 3 Min. erhöhen", "Startet bei Profil „Ansteigend“ besonders sanft", settings.delayAscending3Min) {
+                        onSetAscendingOptions(it, settings.ascendingToMedium)
+                    }
+                    SwitchRow("Ansteigend auf Mittel begrenzen (70 %)", null, settings.ascendingToMedium) {
+                        onSetAscendingOptions(settings.delayAscending3Min, it)
+                    }
+                    SwitchRow("Neue Alarme zunächst stumm starten", "Klingelt erst beim zweiten Intervall (start_snoozed)", settings.startAlertsSnoozed, onSetStartAlertsSnoozed)
+                    SwitchRow("Schlummern-/Stopp-Buttons in Benachrichtigung", null, settings.showButtonsInAlerts, onSetShowButtonsInAlerts)
+                    SwitchRow("Display bei Alarm aufwecken", null, settings.wakePhoneDuringAlerts, onSetWakePhoneDuringAlerts)
+                    SwitchRow("Kamerablitz-Puls bei Alarm", "Zwei kurze Lichtimpulse beim Auslösen", settings.flashTorchOnAlert, onSetFlashTorchOnAlert)
+                    SwitchRow("Während Telefonaten stumm", "Unterdrückt Ton & Vibration bei aktivem Gespräch", settings.noAlarmsDuringCalls, onSetNoAlarmsDuringCalls)
                     SwitchRow(
                         "Keine Alarme bei veralteten Daten",
                         "Sperrt Schwellwertalarme, wenn Messwerte älter als ${settings.disableAlertsStaleMinutes} Min. sind",
@@ -578,9 +657,41 @@ private fun SettingsAlarmsOptionsPage(
                 }
             }
         }
+
+        item {
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.RecordVoiceOver, null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Sprachausgabe (Text-to-Speech)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    }
+                    SwitchRow("Neue Messwerte vorlesen", null, settings.speakReadingsEnabled) {
+                        onSetSpeechConfig(it, settings.speakAlertsEnabled, settings.speakTrendEnabled, settings.speechSpeed)
+                    }
+                    SwitchRow("Alarme vorlesen", null, settings.speakAlertsEnabled) {
+                        onSetSpeechConfig(settings.speakReadingsEnabled, it, settings.speakTrendEnabled, settings.speechSpeed)
+                    }
+                    SwitchRow("Trend beim Vorlesen nennen", null, settings.speakTrendEnabled) {
+                        onSetSpeechConfig(settings.speakReadingsEnabled, settings.speakAlertsEnabled, it, settings.speechSpeed)
+                    }
+                    Text("Sprechgeschwindigkeit: ${String.format(Locale.US, "%.1fx", settings.speechSpeed)}", style = MaterialTheme.typography.bodySmall)
+                    Slider(
+                        value = settings.speechSpeed.toFloat(),
+                        onValueChange = { onSetSpeechConfig(settings.speakReadingsEnabled, settings.speakAlertsEnabled, settings.speakTrendEnabled, it.toDouble()) },
+                        valueRange = 0.7f..1.5f,
+                    )
+                    OutlinedButton(onClick = onTestSpeech) { Text("Sprachausgabe testen") }
+                }
+            }
+        }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SettingsDisplayPage(
     state: MainUiState,
@@ -588,6 +699,8 @@ private fun SettingsDisplayPage(
     onSetTargetRange: (Double, Double) -> Unit,
     onSetPredictionCurve: (Boolean) -> Unit,
     onSetShowChartTreatments: (Boolean) -> Unit,
+    onSetChartVisualOptions: (Boolean, Boolean, Boolean, Int) -> Unit,
+    onSetShowExtraStatusLine: (Boolean) -> Unit,
     onSetKeepScreenOn: (Boolean) -> Unit,
     onSetDynamicColor: (Boolean) -> Unit,
     onSetThemeMode: (ThemeModeOption) -> Unit,
@@ -638,10 +751,32 @@ private fun SettingsDisplayPage(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text("Chart & Nachttisch-Modus", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Chart & Übersicht", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     SwitchRow("30-Min. Vorhersage-Kurve", "Gestrichelte Trend-Prognose im Chart", settings.predictionCurveEnabled, onSetPredictionCurve)
                     SwitchRow("Therapie-Marker im Chart", "Zeigt Insulin (IE) & KH (g) direkt im Verlauf", settings.showChartTreatments, onSetShowChartTreatments)
-                    SwitchRow("Bildschirm wach halten", "Verhindert Auto-Sperre solange xDrip 2 You geöffnet ist", settings.keepScreenOn, onSetKeepScreenOn)
+                    SwitchRow("Nur Punkte im Chart (ohne Linie)", null, settings.chartPointsOnly) {
+                        onSetChartVisualOptions(it, settings.showChartGrid, settings.showChartAverageLine, settings.chartMaxMgdl)
+                    }
+                    SwitchRow("Gitterlinien anzeigen", null, settings.showChartGrid) {
+                        onSetChartVisualOptions(settings.chartPointsOnly, it, settings.showChartAverageLine, settings.chartMaxMgdl)
+                    }
+                    SwitchRow("Durchschnittslinie im Chart", null, settings.showChartAverageLine) {
+                        onSetChartVisualOptions(settings.chartPointsOnly, settings.showChartGrid, it, settings.chartMaxMgdl)
+                    }
+                    Text("Y-Achsen-Maximum", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(0 to "Auto", 250 to "250", 300 to "300", 350 to "350", 400 to "400").forEach { (valMgdl, label) ->
+                            FilterChip(
+                                selected = settings.chartMaxMgdl == valMgdl,
+                                onClick = {
+                                    onSetChartVisualOptions(settings.chartPointsOnly, settings.showChartGrid, settings.showChartAverageLine, valMgdl)
+                                },
+                                label = { Text(if (valMgdl == 0) label else GlucoseUnit.formatValue(valMgdl.toDouble(), settings.useMgdl)) },
+                            )
+                        }
+                    }
+                    SwitchRow("24h-Statuszeile auf Übersicht", "Zeigt TIR, Ø, GMI und CV% kompakt unter dem Chart", settings.showExtraStatusLine, onSetShowExtraStatusLine)
+                    SwitchRow("Bildschirm wach halten (Nachttisch)", "Verhindert Auto-Sperre solange xDrip 2 You offen ist", settings.keepScreenOn, onSetKeepScreenOn)
                 }
             }
         }
@@ -669,12 +804,16 @@ private fun SettingsDisplayPage(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SettingsCloudPage(
     state: MainUiState,
     onSetNightscoutConfig: (String, String, Boolean, Boolean) -> Unit,
+    onSetNightscoutExtraConfig: (Boolean, Boolean) -> Unit,
     onSyncNightscoutNow: ((String) -> Unit) -> Unit,
     onSetLocalBroadcastEnabled: (Boolean) -> Unit,
+    onSetBroadcastTargetPackage: (String) -> Unit,
+    onSetRetentionDays: (Int) -> Unit,
     onExportJson: () -> Unit,
     onImportJson: () -> Unit,
     onExportCsv: () -> Unit,
@@ -684,6 +823,7 @@ private fun SettingsCloudPage(
     val settings = state.settings
     var nsUrlText by remember(settings.nightscoutUrl) { mutableStateOf(settings.nightscoutUrl) }
     var nsSecretText by remember(settings.nightscoutApiSecret) { mutableStateOf(settings.nightscoutApiSecret) }
+    var targetPkgText by remember(settings.broadcastTargetPackage) { mutableStateOf(settings.broadcastTargetPackage) }
     var nsFeedback by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
@@ -716,8 +856,14 @@ private fun SettingsCloudPage(
                     SwitchRow("Als Follower abrufen (alle 5 Min.)", null, settings.nightscoutFollowEnabled) { follow ->
                         onSetNightscoutConfig(nsUrlText, nsSecretText, follow, settings.nightscoutUploadEnabled)
                     }
-                    SwitchRow("Werte & Einträge hochladen", null, settings.nightscoutUploadEnabled) { upload ->
+                    SwitchRow("Messwerte hochladen", null, settings.nightscoutUploadEnabled) { upload ->
                         onSetNightscoutConfig(nsUrlText, nsSecretText, settings.nightscoutFollowEnabled, upload)
+                    }
+                    SwitchRow("Therapie-Einträge hochladen", null, settings.nightscoutUploadTreatments) {
+                        onSetNightscoutExtraConfig(it, settings.nightscoutWifiOnly)
+                    }
+                    SwitchRow("Nur im WLAN synchronisieren", null, settings.nightscoutWifiOnly) {
+                        onSetNightscoutExtraConfig(settings.nightscoutUploadTreatments, it)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(
@@ -746,13 +892,48 @@ private fun SettingsCloudPage(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text("Inter-App Broadcast & Export", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Lokaler Broadcast (AAPS / Watches)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     SwitchRow(
-                        "Lokaler xDrip-Broadcast (AAPS / Watches)",
+                        "Lokaler xDrip-Broadcast aktiv",
                         "Sendet com.eveningoutpost.dexdrip.BgEstimate bei neuen Werten",
                         settings.localBroadcastEnabled,
                         onSetLocalBroadcastEnabled,
                     )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedTextField(
+                            value = targetPkgText,
+                            onValueChange = { targetPkgText = it },
+                            label = { Text("Optional: Ziel-Package (leer = alle)") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedButton(onClick = { onSetBroadcastTargetPackage(targetPkgText) }) { Text("OK") }
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("Speicher & Backup", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Lokale Datenvorhaltung", style = MaterialTheme.typography.labelLarge, color = scheme.onSurfaceVariant)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(30, 60, 90, 180, 365).forEach { days ->
+                            FilterChip(
+                                selected = settings.retentionDays == days,
+                                onClick = { onSetRetentionDays(days) },
+                                label = { Text("$days T.") },
+                            )
+                        }
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = onExportJson, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Rounded.Upload, null, Modifier.size(18.dp))
@@ -779,6 +960,7 @@ private fun SettingsCloudPage(
 @Composable
 private fun SettingsDiagnosticsPage(
     state: MainUiState,
+    onReopenOnboarding: () -> Unit,
     onSimulateNotification: (String, (String) -> Unit) -> Unit,
     onInjectManualReading: (Double) -> Unit,
     onSeedDemo: () -> Unit,
@@ -804,21 +986,28 @@ private fun SettingsDiagnosticsPage(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text("App-Info & Changelog", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("App-Info, Assistent & Changelog", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(
                         "xDrip 2 You · Version ${BuildConfig.VERSION_NAME} (Code ${BuildConfig.VERSION_CODE})",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
                     )
                     Text(
-                        "Lokaler Kotlin + Jetpack Compose (Material 3 You) Fork von NightscoutFoundation/xDrip (Branch: kotlin-jetpack-you).",
+                        "Lokaler Kotlin + Jetpack Compose (Material 3 You) Fork von xDrip (Branch: kotlin-jetpack-you).",
                         style = MaterialTheme.typography.bodySmall,
                         color = scheme.onSurfaceVariant,
                     )
-                    OutlinedButton(onClick = { showChangelog = true }) {
-                        Icon(Icons.Rounded.History, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Changelog anzeigen")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { showChangelog = true }, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Rounded.History, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Changelog")
+                        }
+                        OutlinedButton(onClick = onReopenOnboarding, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Assistent")
+                        }
                     }
                 }
             }
@@ -931,10 +1120,12 @@ private fun SettingsDiagnosticsPage(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text("[26.11.3] · Optionsmenüs & Sensor-Tools", fontWeight = FontWeight.Bold)
+                    Text("[26.11.4] · Einrichtungs-Assistent & volle xDrip-Optionen", fontWeight = FontWeight.Bold)
+                    Text("• Geführter 4-Schritt-Einrichtungs-Assistent für den ersten Start inkl. aller Systemberechtigungen\n• Alle wichtigen xDrip-Optionen funktional integriert: Sprachausgabe (TTS), Kamerablitz-Puls, Ansteigend-Feinabstimmung, Alle Companion-Apps, Sensor-Ablauf-Erinnerung, Chart-Optionen (Punkte/Gitter/Ø-Linie/Y-Achse), 24h-Statuszeile & Datenvorhaltung")
+                    Text("[26.11.3] · Options-Hub & Sensor-Tools", fontWeight = FontWeight.Bold)
                     Text("• Hierarchischer Material-3-You-Options-Hub mit Suchleiste\n• Eigener Alarm-Klingelton, Anruf-Stummschaltung & Stale-Alarm-Sperre\n• Sensor-Laufzeit-Tracking, Nachttisch-Modus & CSV-Export")
                     Text("[26.11.2] · xDrip 2 You & Ökosystem", fontWeight = FontWeight.Bold)
-                    Text("• Rebrand zu xDrip 2 You\n• Therapie-Tagebuch (IE/KH/BZ) + Chart-Marker\n• 30-Min.-Vorhersage, Niedrig-Vorhersage- & Anhaltend-Hoch-Alarm\n• Nightscout Follower/Upload, AAPS-Broadcast, Material-You-Widget & JSON-Backup")
+                    Text("• Rebrand zu xDrip 2 You, Therapie-Tagebuch (IE/KH/BZ) + Chart-Marker\n• 30-Min.-Vorhersage, Niedrig-Vorhersage- & Anhaltend-Hoch-Alarm\n• Nightscout Follower/Upload, AAPS-Broadcast, Material-You-Widget & JSON-Backup")
                     Text("[26.11.1] · Kotlin + Jetpack Compose Basis", fontWeight = FontWeight.Bold)
                     Text("• Komplette Neuimplementierung in Kotlin + Jetpack Compose Material 3 You\n• CamAPS FX Companion Collector, Alarm-Engine & Foreground Service")
                 }

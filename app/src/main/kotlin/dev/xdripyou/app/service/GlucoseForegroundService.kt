@@ -50,8 +50,10 @@ class GlucoseForegroundService : Service() {
                 app.alertEngine.evaluatePeriodicChecks()
                 if (tickCount % 5 == 0) {
                     val settings = app.repository.settingsStore.current()
+                    val wifiOk = !settings.nightscoutWifiOnly || SystemPermissionsHelper.isOnWifi(this@GlucoseForegroundService)
                     if ((settings.nightscoutFollowEnabled || settings.nightscoutUploadEnabled) &&
-                        settings.nightscoutUrl.isNotBlank()
+                        settings.nightscoutUrl.isNotBlank() &&
+                        wifiOk
                     ) {
                         val beforeLatest = app.repository.getLatestReadings(1).firstOrNull()?.timestampMs ?: 0L
                         app.repository.syncNightscout()
@@ -61,6 +63,9 @@ class GlucoseForegroundService : Service() {
                             app.alertEngine.evaluateOnNewReading(afterLatest)
                         }
                     }
+                }
+                if (tickCount % 60 == 0) {
+                    app.repository.pruneExpiredReadings()
                 }
             }
         }

@@ -112,7 +112,10 @@ class CamApsNotificationListenerService : NotificationListenerService() {
                 )
                 app.alertEngine.refreshOngoingNotification()
                 app.alertEngine.evaluateOnNewReading(outcome.reading)
-                if (repo.settingsStore.current().nightscoutUploadEnabled) {
+                val currentSettings = repo.settingsStore.current()
+                if (currentSettings.nightscoutUploadEnabled &&
+                    (!currentSettings.nightscoutWifiOnly || SystemPermissionsHelper.isOnWifi(this))
+                ) {
                     repo.syncNightscout()
                 }
             }

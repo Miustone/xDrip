@@ -6,6 +6,26 @@ Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 
 ---
 
+## [26.11.4] - 2026-11-18
+
+### Hinzugefügt & Integriert
+- **Ersteinrichtungs-Assistent (First-Run Setup Wizard, `OnboardingWizard.kt`):**
+  - Geführter 4-Schritte-Assistent beim ersten App-Start:
+    1. *Willkommen & Einheiten*: Auswahl von `mg/dL` oder `mmol/L` und Material-3-You-Farbschema (System, Hell, Dunkel + Android 12+ Dynamic Color).
+    2. *Datenquelle wählen*: CamAPS FX Companion App, erweiterter Companion-App-Modus (Dexcom, Medtronic, Eversense, Aidex, Ottai, Sinocare, Diabeloop), Nightscout-Follower oder Demo/Manuell.
+    3. *Berechtigungen einrichten*: Interaktive Status-Karten & Direkt-Buttons für **Notification Listener**, **Benachrichtigungen (`POST_NOTIFICATIONS`)**, **Akku-Optimierung ausnehmen**, **Nicht-stören-Umgehung (`DND`)** sowie **Exakte Alarme (`SCHEDULE_EXACT_ALARM`)** inkl. automatischem Refresh bei App-Rückkehr.
+    4. *Sensor, Alarme & Abschluss*: Sensor-Startzeit setzen, optionale Demo-Werte laden und direkt ins Dashboard starten. Erneut aufrufbar über *Einstellungen -> Diagnose, Labor & Info*.
+- **Umfassende funktionale xDrip-Einstellungen integriert:**
+  - **Datenquellen & Sensor (`CamApsParser`, `GlucoseRepository`):** Erweiterte Companion-App-Erkennung (`extendedCompanionPackages`), Sensor-Laufzeit in Tagen (`sensorExpectedDays`) und Sensor-Ablauf-Vorwarnung (`sensorExpiryAlertEnabled`).
+  - **Alarme, Eskalation & Sprachausgabe (`AlertEngine`, `SpeechHelper`):**
+    - `TextToSpeech`-Sprachausgabe für neue Blutzuckerwerte (`speakReadingsEnabled`), Trendrichtung (`speakTrendEnabled`), aktive Alarme (`speakAlertsEnabled`), Sprechtempo (`speechSpeed`) und In-App-Sprachtest.
+    - Lautstärke-Eskalation (`ascendingToMedium`, `delayAscending3Min`), Stumm-Start-Modus (`startAlertsSnoozed`), Action-Buttons in Alarm-Benachrichtigungen (`showButtonsInAlerts`), Bildschirm wecken (`wakePhoneDuringAlerts`) und Kamera-Blitzlicht bei Alarm (`flashTorchOnAlert`).
+  - **Anzeige & Chart (`GlucoseChart`, `OverviewScreen`):** Punktdarstellung ohne Verbindungslinie (`chartPointsOnly`), Rasterlinien (`showChartGrid`), Durchschnittslinie (`showChartAverageLine`), Y-Achsen-Obergrenze (`chartMaxMgdl`) und 24h-Statistikzeile mit TIR, Durchschnitt, GMI & CV% (`showExtraStatusLine`).
+  - **Cloud, Broadcast & Aufbewahrung (`XdripBroadcastSender`, `NightscoutClient`, `GlucoseForegroundService`):** Gezieltes Broadcast-Zielpaket (`broadcastTargetPackage`), optionaler Nightscout-Behandlungs-Upload (`nightscoutUploadTreatments`), Upload nur im WLAN (`nightscoutWifiOnly`) sowie automatische Datenbereinigung nach konfigurierbarer Aufbewahrungsdauer (`retentionDays`).
+  - **Versionsstand:** `versionName = "26.11.4"`, `versionCode = 261104`.
+
+---
+
 ## [26.11.3] - 2026-11-18
 
 ### Hinzugefügt & Verbessert

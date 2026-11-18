@@ -1,10 +1,13 @@
 package dev.xdripyou.app
 
 import dev.xdripyou.app.domain.CamApsParser
+import dev.xdripyou.app.domain.PermissionStatus
 import dev.xdripyou.app.domain.SourceUnitMode
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CamApsParserTest {
@@ -54,5 +57,29 @@ class CamApsParserTest {
             unitMode = SourceUnitMode.AUTO,
         )
         assertNull(result)
+    }
+
+    @Test
+    fun `extended companion packages include dexcom medtronic eversense and camaps`() {
+        assertTrue(CamApsParser.extendedCompanionPackages.containsAll(CamApsParser.defaultCamApsPackages))
+        assertTrue(CamApsParser.extendedCompanionPackages.contains("com.dexcom.g7"))
+        assertTrue(CamApsParser.extendedCompanionPackages.contains("com.medtronic.diabetes.guardianconnect"))
+        assertTrue(CamApsParser.extendedCompanionPackages.contains("com.senseonics.eversense365.us"))
+    }
+
+    @Test
+    fun `permission status reports allRecommendedGranted only when every permission is granted`() {
+        val partial = PermissionStatus(
+            notificationListenerEnabled = true,
+            postNotificationsGranted = true,
+            ignoringBatteryOptimizations = false,
+            dndPolicyAccessGranted = true,
+            canScheduleExactAlarms = true,
+        )
+        assertTrue(partial.coreReady)
+        assertFalse(partial.allRecommendedGranted)
+
+        val complete = partial.copy(ignoringBatteryOptimizations = true)
+        assertTrue(complete.allRecommendedGranted)
     }
 }
