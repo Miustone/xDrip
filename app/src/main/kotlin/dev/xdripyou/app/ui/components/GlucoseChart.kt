@@ -3,8 +3,10 @@ package dev.xdripyou.app.ui.components
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,9 +24,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.positionChange
+import kotlin.math.roundToLong
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -80,23 +86,29 @@ fun GlucoseChart(
     showBasalInChart: Boolean = false,
     basalSchedule: BasalSchedule? = null,
     dotSizeDp: Int = 4,
+    panOffsetMs: Long = 0L,
+    windowLabel: String? = null,
+    onZoomPanChange: ((newWindowMs: Long, newPanOffsetMs: Long) -> Unit)? = null,
+    fullBleed: Boolean = false,
     chartHeight: Dp? = 210.dp,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
     val glucoseColors = LocalGlucoseColors.current
     var selected by remember { mutableStateOf<GlucoseReading?>(null) }
+    var lastTapMs by remember { mutableLongStateOf(0L) }
 
-    val futureHorizonMs = if (predictions.isNotEmpty()) 30 * 60_000L else 0L
-    val startMs = nowMs - windowMs
-    val endMs = nowMs + futureHorizonMs
+    val anchorNowMs = nowMs - panOffsetMs.coerceAtLeast(0L)
+    val futureHorizonMs = if (predictions.isNotEmpty() && panOffsetMs <= 0L) 30 * 60_000L else 0L
+    val startMs = anchorNowMs - windowMs
+    val endMs = anchorNowMs + futureHorizonMs
     val totalSpanMs = (endMs - startMs).coerceAtLeast(1L)
 
     val density = LocalDensity.current
-    val leftPadPx = with(density) { 42.dp.toPx() }
-    val rightPadPx = with(density) { 12.dp.toPx() }
-    val topPadPx = with(density) { 10.dp.toPx() }
-    val bottomPadPx = with(density) { 26.dp.toPx() }
+    val leftPadPx = with(density) { (if (fullBleed) 32.dp else 42.dp).toPx() }
+    val rightPadPx = with(density) { (if (fullBleed) 6.dp else 12.dp).toPx() }
+    val topPadPx = with(density) { 8.dp.toPx() }
+    val bottomPadPx = with(density) { 24.dp.toPx() }
     val labelTextSizePx = with(density) { 10.5f * density.density }
 
     fun pickNearest(touchX: Float, widthPx: Float) {
@@ -107,6 +119,10 @@ fun GlucoseChart(
         selected = readings.minByOrNull { abs(it.timestampMs - targetMs) }
     }
 
+    val latestWindowMs by rememberUpdatedState(windowMs)
+    val latestPanMs by rememberUpdatedState(panOffsetMs)
+    val latestOnZoomPan by rememberUpdatedState(onZoomPanChange)
+
     Column(modifier = modifier.fillMaxWidth()) {
         if (selected != null) {
             val r = selected!!
@@ -116,9 +132,10 @@ fun GlucoseChart(
             val color = glucoseColors.colorForMgdl(r.mgdl, targetLowMgdl, targetHighMgdl)
             Row(
                 modifier = Modifier
+                    .padding(horizontal = if (fullBleed) 10.dp else 0.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(scheme.surfaceContainerHigh)
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
@@ -142,27 +159,29 @@ fun GlucoseChart(
             }
         } else {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = if (fullBleed) 10.dp else 0.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     LegendDot(glucoseColors.inRange, "Ziel")
                     LegendDot(glucoseColors.low, "Niedrig")
                     LegendDot(glucoseColors.high, "Hoch")
-                    if (predictions.isNotEmpty()) {
-                        LegendDot(scheme.tertiary, "Trend")
+                    if (showStepsInChart && activitySamples.isNotEmpty()) {
+                        LegendDot(scheme.tertiary.copy(alpha = 0.7f), "Aktivität")
                     }
                 }
                 Text(
-                    text = "Tippen / Ziehen",
+                    text = windowLabel?.let { "$it · Pinch-Zoom" } ?: "Pinch-Zoom / Tippen",
                     style = MaterialTheme.typography.labelSmall,
                     color = scheme.onSurfaceVariant,
                 )
             }
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
 
         val canvasSizeMod = if (chartHeight != null) {
             Modifier.fillMaxWidth().height(chartHeight)
@@ -171,18 +190,63 @@ fun GlucoseChart(
         }
         Canvas(
             modifier = canvasSizeMod
-                .pointerInput(readings, nowMs, windowMs, futureHorizonMs) {
-                    detectTapGestures { offset ->
-                        pickNearest(offset.x, size.width.toFloat())
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        val firstDown = awaitFirstDown(requireUnconsumed = false)
+                        val startPos = firstDown.position
+                        var moved = false
+                        val touchSlop = viewConfiguration.touchSlop
+                        val chartWidthPx = (size.width - leftPadPx - rightPadPx).coerceAtLeast(1f)
+
+                        do {
+                            val event = awaitPointerEvent()
+                            val pressed = event.changes.filter { it.pressed }
+                            if (pressed.isEmpty()) break
+
+                            if (pressed.size >= 2 && latestOnZoomPan != null) {
+                                val zoom = event.calculateZoom()
+                                val panX = event.calculatePan().x
+                                if (abs(zoom - 1f) > 0.004f || abs(panX) > 0.5f) {
+                                    moved = true
+                                    val newWin = (latestWindowMs / zoom).roundToLong().coerceIn(3_600_000L, 86_400_000L)
+                                    val maxPan = (86_400_000L - newWin).coerceAtLeast(0L)
+                                    val panDeltaMs = ((panX / chartWidthPx) * newWin).roundToLong()
+                                    val newPan = (latestPanMs + panDeltaMs).coerceIn(0L, maxPan)
+                                    latestOnZoomPan?.invoke(newWin, newPan)
+                                    event.changes.forEach { it.consume() }
+                                }
+                            } else if (pressed.size == 1) {
+                                val change = pressed.first()
+                                val dist = (change.position - startPos).getDistance()
+                                if (dist > touchSlop) moved = true
+                                if (moved && latestOnZoomPan != null) {
+                                    val dx = change.positionChange().x
+                                    if (abs(dx) > 0.5f && latestWindowMs < 86_400_000L) {
+                                        val maxPan = (86_400_000L - latestWindowMs).coerceAtLeast(0L)
+                                        val panDeltaMs = ((dx / chartWidthPx) * latestWindowMs).roundToLong()
+                                        val newPan = (latestPanMs + panDeltaMs).coerceIn(0L, maxPan)
+                                        latestOnZoomPan?.invoke(latestWindowMs, newPan)
+                                        change.consume()
+                                    } else {
+                                        pickNearest(change.position.x, size.width.toFloat())
+                                    }
+                                }
+                            }
+                        } while (event.changes.any { it.pressed })
+
+                        if (!moved) {
+                            val nowTap = System.currentTimeMillis()
+                            if (nowTap - lastTapMs <= 280L && latestOnZoomPan != null) {
+                                // Double tap resets to default 6h live view
+                                latestOnZoomPan?.invoke(6 * 3_600_000L, 0L)
+                                selected = null
+                                lastTapMs = 0L
+                            } else {
+                                pickNearest(firstDown.position.x, size.width.toFloat())
+                                lastTapMs = nowTap
+                            }
+                        }
                     }
-                }
-                .pointerInput(readings, nowMs, windowMs, futureHorizonMs) {
-                    detectDragGestures(
-                        onDragStart = { offset -> pickNearest(offset.x, size.width.toFloat()) },
-                        onDrag = { change, _ -> pickNearest(change.position.x, size.width.toFloat()) },
-                        onDragEnd = { selected = null },
-                        onDragCancel = { selected = null },
-                    )
                 },
         ) {
             val chartLeft = leftPadPx
@@ -286,7 +350,7 @@ fun GlucoseChart(
             for (i in 0..4) {
                 val frac = i / 4.0
                 val ms = startMs + (totalSpanMs * frac).toLong()
-                val text = if (i == 4 && futureHorizonMs == 0L) "Jetzt" else timeFmt.format(Date(ms))
+                val text = if (i == 4 && futureHorizonMs == 0L && panOffsetMs <= 0L) "Jetzt" else timeFmt.format(Date(ms))
                 xLabelPaint.textAlign = when (i) {
                     0 -> Paint.Align.LEFT
                     4 -> Paint.Align.RIGHT
@@ -356,7 +420,7 @@ fun GlucoseChart(
                 val stepCount = 24
                 val basalPath = Path()
                 for (i in 0..stepCount) {
-                    val ms = startMs + ((nowMs - startMs) * i) / stepCount
+                    val ms = startMs + ((anchorNowMs - startMs) * i) / stepCount
                     val rate = basalSchedule.rateAt(ms)
                     val bx = xForMs(ms)
                     val by = chartBottom - ((rate / maxRate) * basalBandH).toFloat()

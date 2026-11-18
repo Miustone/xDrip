@@ -32,13 +32,11 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -46,6 +44,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import kotlin.math.roundToInt
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -82,19 +82,42 @@ fun OverviewScreen(
     val settings = state.settings
     var showTreatmentSheet by remember { mutableStateOf(false) }
     var showSnoozeSheet by remember { mutableStateOf(false) }
+    var zoomWindowMs by remember { mutableLongStateOf(6 * 3_600_000L) }
+    var panOffsetMs by remember { mutableLongStateOf(0L) }
+
+    val anchorNowMs = state.nowMs - panOffsetMs
+    val visibleStartMs = anchorNowMs - zoomWindowMs
+    val visibleReadings = remember(state.readings24h, visibleStartMs, anchorNowMs) {
+        state.readings24h.filter { it.timestampMs in visibleStartMs..anchorNowMs }
+    }
+    val visibleTreatments = remember(state.treatments24h, visibleStartMs, anchorNowMs) {
+        state.treatments24h.filter { it.timestampMs in visibleStartMs..anchorNowMs }
+    }
+    val zoomStats = remember(visibleReadings, settings.targetLowMgdl, settings.targetHighMgdl) {
+        GlucoseStats.compute(
+            readings = visibleReadings,
+            targetLowMgdl = settings.targetLowMgdl,
+            targetHighMgdl = settings.targetHighMgdl,
+        )
+    }
+    val zoomLabel = remember(zoomWindowMs, panOffsetMs) {
+        val totalMins = (zoomWindowMs / 60_000L).toInt()
+        val hrs = totalMins / 60
+        val mins = totalMins % 60
+        val durStr = if (mins == 0) "$hrs Std." else "${hrs}h ${mins}m"
+        if (panOffsetMs > 60_000L) "$durStr (-${(panOffsetMs / 60_000L)}m)" else durStr
+    }
 
     if (isLandscape) {
         Row(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = modifier.fillMaxSize(),
         ) {
             Column(
                 modifier = Modifier
-                    .weight(0.39f)
-                    .fillMaxHeight(),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                    .weight(0.38f)
+                    .fillMaxHeight()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 state.activeAlert?.let { alert ->
                     ActiveAlertBanner(
@@ -126,9 +149,9 @@ fun OverviewScreen(
                     modifier = Modifier.weight(1f),
                 )
                 CompactStatsCard(
-                    stats = state.windowStats,
+                    stats = zoomStats,
                     stats24h = state.stats24h,
-                    windowLabel = state.chartWindow.label,
+                    windowLabel = zoomLabel,
                     useMgdl = settings.useMgdl,
                     targetLowMgdl = settings.targetLowMgdl,
                     targetHighMgdl = settings.targetHighMgdl,
@@ -136,66 +159,88 @@ fun OverviewScreen(
                 )
             }
 
-            ChartPanelCard(
+            FullBleedChartPanel(
                 state = state,
-                onSelectWindow = onSelectWindow,
+                visibleReadings = visibleReadings,
+                visibleTreatments = visibleTreatments,
+                zoomWindowMs = zoomWindowMs,
+                panOffsetMs = panOffsetMs,
+                windowLabel = zoomLabel,
+                onZoomPanChange = { w, p ->
+                    zoomWindowMs = w
+                    panOffsetMs = p
+                },
                 modifier = Modifier
-                    .weight(0.61f)
+                    .weight(0.62f)
                     .fillMaxHeight(),
             )
         }
     } else {
         Column(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = modifier.fillMaxSize(),
         ) {
-            state.activeAlert?.let { alert ->
-                ActiveAlertBanner(
-                    alert = alert,
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                state.activeAlert?.let { alert ->
+                    ActiveAlertBanner(
+                        alert = alert,
+                        useMgdl = settings.useMgdl,
+                        nowMs = state.nowMs,
+                        onSnooze = onSnoozeAlert,
+                        onStop = onStopAlert,
+                        onOpenCustomSnooze = { showSnoozeSheet = true },
+                        compactMode = settings.compactAlertBanner,
+                    )
+                }
+
+                if (!state.permissions.coreReady || !state.permissions.ignoringBatteryOptimizations) {
+                    CompactSetupBanner(
+                        notificationListenerGranted = state.permissions.notificationListenerEnabled,
+                        postNotificationsGranted = state.permissions.postNotificationsGranted,
+                        batteryIgnored = state.permissions.ignoringBatteryOptimizations,
+                        onOpenNotificationListener = onOpenNotificationListener,
+                        onRequestPostNotifications = onRequestPostNotifications,
+                        onRequestBatteryExemption = onRequestBatteryExemption,
+                    )
+                }
+
+                HeroGlucoseCard(
+                    state = state,
+                    compactMode = false,
+                    onAddTreatmentClick = { showTreatmentSheet = true },
+                    onSeedDemo = onSeedDemo,
+                    onOpenSettingsTab = onOpenSettingsTab,
+                )
+
+                CompactStatsCard(
+                    stats = zoomStats,
+                    stats24h = state.stats24h,
+                    windowLabel = zoomLabel,
                     useMgdl = settings.useMgdl,
-                    nowMs = state.nowMs,
-                    onSnooze = onSnoozeAlert,
-                    onStop = onStopAlert,
-                    onOpenCustomSnooze = { showSnoozeSheet = true },
-                    compactMode = settings.compactAlertBanner,
+                    targetLowMgdl = settings.targetLowMgdl,
+                    targetHighMgdl = settings.targetHighMgdl,
+                    showExtraStatusLine = settings.showExtraStatusLine,
                 )
             }
 
-            if (!state.permissions.coreReady || !state.permissions.ignoringBatteryOptimizations) {
-                CompactSetupBanner(
-                    notificationListenerGranted = state.permissions.notificationListenerEnabled,
-                    postNotificationsGranted = state.permissions.postNotificationsGranted,
-                    batteryIgnored = state.permissions.ignoringBatteryOptimizations,
-                    onOpenNotificationListener = onOpenNotificationListener,
-                    onRequestPostNotifications = onRequestPostNotifications,
-                    onRequestBatteryExemption = onRequestBatteryExemption,
-                )
-            }
-
-            HeroGlucoseCard(
+            FullBleedChartPanel(
                 state = state,
-                compactMode = false,
-                onAddTreatmentClick = { showTreatmentSheet = true },
-                onSeedDemo = onSeedDemo,
-                onOpenSettingsTab = onOpenSettingsTab,
-            )
-
-            ChartPanelCard(
-                state = state,
-                onSelectWindow = onSelectWindow,
-                modifier = Modifier.weight(1f),
-            )
-
-            CompactStatsCard(
-                stats = state.windowStats,
-                stats24h = state.stats24h,
-                windowLabel = state.chartWindow.label,
-                useMgdl = settings.useMgdl,
-                targetLowMgdl = settings.targetLowMgdl,
-                targetHighMgdl = settings.targetHighMgdl,
-                showExtraStatusLine = settings.showExtraStatusLine,
+                visibleReadings = visibleReadings,
+                visibleTreatments = visibleTreatments,
+                zoomWindowMs = zoomWindowMs,
+                panOffsetMs = panOffsetMs,
+                windowLabel = zoomLabel,
+                onZoomPanChange = { w, p ->
+                    zoomWindowMs = w
+                    panOffsetMs = p
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
             )
         }
     }
@@ -380,44 +425,34 @@ private fun HeroGlucoseCard(
 }
 
 @Composable
-private fun ChartPanelCard(
+private fun FullBleedChartPanel(
     state: MainUiState,
-    onSelectWindow: (ChartWindow) -> Unit,
+    visibleReadings: List<dev.xdripyou.app.domain.GlucoseReading>,
+    visibleTreatments: List<TreatmentEntry>,
+    zoomWindowMs: Long,
+    panOffsetMs: Long,
+    windowLabel: String,
+    onZoomPanChange: (Long, Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
     val settings = state.settings
-    Card(
+    Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = scheme.surfaceContainerLow),
+        shape = RectangleShape,
+        color = scheme.surfaceContainerLowest,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(top = 6.dp, bottom = 2.dp),
         ) {
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                ChartWindow.entries.forEachIndexed { idx, window ->
-                    SegmentedButton(
-                        selected = state.chartWindow == window,
-                        onClick = { onSelectWindow(window) },
-                        shape = SegmentedButtonDefaults.itemShape(
-                            index = idx,
-                            count = ChartWindow.entries.size,
-                        ),
-                    ) {
-                        Text(window.label, maxLines = 1)
-                    }
-                }
-            }
-            Spacer(Modifier.height(8.dp))
             val preset = dev.xdripyou.app.domain.InsulinPreset.fromWire(settings.insulinPreset)
             GlucoseChart(
-                readings = state.readingsInWindow,
-                treatments = if (settings.showChartTreatments) state.treatmentsInWindow else emptyList(),
-                predictions = state.predictions,
-                windowMs = state.chartWindow.durationMs,
+                readings = visibleReadings,
+                treatments = if (settings.showChartTreatments) visibleTreatments else emptyList(),
+                predictions = if (panOffsetMs <= 0L) state.predictions else emptyList(),
+                windowMs = zoomWindowMs,
                 nowMs = state.nowMs,
                 useMgdl = settings.useMgdl,
                 targetLowMgdl = settings.targetLowMgdl,
@@ -436,6 +471,10 @@ private fun ChartPanelCard(
                 showBasalInChart = settings.showBasalInChart && settings.showBasalRate,
                 basalSchedule = if (settings.showBasalRate) state.basalSchedule else null,
                 dotSizeDp = settings.chartDotSizeDp,
+                panOffsetMs = panOffsetMs,
+                windowLabel = windowLabel,
+                onZoomPanChange = onZoomPanChange,
+                fullBleed = true,
                 chartHeight = null,
                 modifier = Modifier.weight(1f),
             )

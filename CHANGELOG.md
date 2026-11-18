@@ -6,6 +6,19 @@ Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 
 ---
 
+## [26.11.15] - 2026-11-18
+
+### Hinzugefügt & Verbessert (Randloser Graph & Pinch-to-Zoom bis 24 Std.)
+- **Randloser Vollbreiten-Graph (`OverviewScreen.kt`, `GlucoseChart.kt`):**
+  - Nutzt die komplette Bildschirmbreite (ohne seitliche Card-Ränder) für Blutzucker, Insulin, Mahlzeiten und Schritte.
+- **Statistik-Karte nach oben verschoben (`OverviewScreen.kt`):**
+  - *Ziel, Ø, GMI & CV* sitzen jetzt direkt unter dem kompakten Blutzucker-Kopf und oberhalb des Graphen.
+- **Pinch-to-Zoom (1–24 Std.) & Verschieben statt Zeitfenster-Buttons (`GlucoseChart.kt`):**
+  - Entfernt die Button-Leiste (`3 / 6 / 12 / 24 Std.`) zugunsten von stufenlosem Zwei-Finger-Pinch-to-Zoom (1 bis 24 Stunden), horizontalem Wischen durch die letzten 24 Stunden und Doppel-Tippen zum Zurücksetzen auf `6 Std. · Live`.
+- **Versionsstand:** `versionName = "26.11.15-rc1"`, `versionCode = 261115`.
+
+---
+
 ## [26.11.14] - 2026-11-18
 
 ### Hinzugefügt & Verbessert (Classic-xDrip-Proportionen, Zahlenwand, AOD, Schritte & Detailsuche)
