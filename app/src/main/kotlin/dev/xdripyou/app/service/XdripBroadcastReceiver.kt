@@ -3,8 +3,10 @@ package dev.xdripyou.app.service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Process
 import dev.xdripyou.app.XdripYouApplication
 import dev.xdripyou.app.data.InsertOutcome
+import dev.xdripyou.app.domain.LibreHardwareParser
 import dev.xdripyou.app.domain.TrendArrow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -74,6 +76,30 @@ class XdripBroadcastReceiver : BroadcastReceiver() {
                             TaskerCommandHandler.execute(app, cmd)
                         }
                     }
+                    ACTION_OOP2_DATA, ACTION_OOP_LEGACY -> {
+                        if (!settings.libreOopBridgeEnabled) return@launch
+                        val payload = intent.getStringExtra("com.eveningoutpost.dexdrip.Extras.DATA")
+                            ?: intent.getStringExtra("data")
+                            ?: return@launch
+                        val oopReadings = LibreHardwareParser.parseOopResultsJson(payload)
+                        var inserted = false
+                        for (r in oopReadings) {
+                            val out = app.repository.insertReading(
+                                mgdl = r.mgdl,
+                                timestampMs = r.timestampMs,
+                                source = "Libre OOP2",
+                                rawText = null,
+                                applyDeduplication = true,
+                            )
+                            if (out is InsertOutcome.Inserted) {
+                                inserted = true
+                                app.alertEngine.evaluateOnNewReading(out.reading)
+                            }
+                        }
+                        if (inserted) {
+                            app.alertEngine.refreshOngoingNotification()
+                        }
+                    }
                 }
             } finally {
                 pendingResult.finish()
@@ -85,6 +111,10 @@ class XdripBroadcastReceiver : BroadcastReceiver() {
         const val ACTION_SNOOZE = "com.eveningoutpost.dexdrip.Snooze"
         const val ACTION_LOCALE_FIRE = "com.twofortyfouram.locale.intent.action.FIRE_SETTING"
         const val ACTION_TASKER_COMMAND = "dev.xdripyou.app.TASKER_COMMAND"
+        const val ACTION_OOP2_DATA = "com.eveningoutpost.dexdrip.OOP2_DATA"
+        const val ACTION_OOP_LEGACY = "com.eveningoutpost.dexdrip.LIBRE_OOP_RESPONSE"
+        const val ACTION_LIBRE_DATA = "com.eveningoutpost.dexdrip.LIBRE_DATA"
+        const val ACTION_LIBRE_BLE_DATA = "com.eveningoutpost.dexdrip.LIBRE_BLE_DATA"
         const val EXTRA_LOCALE_BUNDLE = "com.twofortyfouram.locale.intent.extra.BUNDLE"
         const val EXTRA_TASKER_MESSAGE = "com.eveningoutpost.dexdrip.localetasker.extra.STRING_MESSAGE"
         const val SENDER_ID_BG = "xDrip 2 You"
@@ -120,6 +150,40 @@ class XdripBroadcastReceiver : BroadcastReceiver() {
                 putExtra("com.eveningoutpost.dexdrip.Extras.Time", reading.timestampMs)
                 putExtra("com.eveningoutpost.dexdrip.Extras.Iob", iobUnits)
                 putExtra("com.eveningoutpost.dexdrip.Extras.Cob", cobGrams)
+                addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+            }
+            context.sendBroadcast(intent)
+        }
+
+        fun sendLibreOopFrame(
+            context: Context,
+            fram344: ByteArray,
+            patchUid: ByteArray?,
+            serial: String,
+            timestampMs: Long,
+        ) {
+            val intent = Intent(ACTION_LIBRE_DATA).apply {
+                putExtra("com.eveningoutpost.dexdrip.Extras.DATA_BUFFER", fram344.copyOfRange(0, minOf(344, fram344.size)))
+                putExtra("com.eveningoutpost.dexdrip.Extras.TIMESTAMP", timestampMs)
+                putExtra("com.eveningoutpost.dexdrip.Extras.LIBRE_SN", serial)
+                putExtra("com.eveningoutpost.dexdrip.Extras.LIBRE_RAW_ID", Process.myPid())
+                if (patchUid != null) {
+                    putExtra("com.eveningoutpost.dexdrip.Extras.LIBRE_PATCH_UID_BUFFER", patchUid)
+                }
+                addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+            }
+            context.sendBroadcast(intent)
+        }
+
+        fun sendLibre2BleFrame(
+            context: Context,
+            frame46: ByteArray,
+            timestampMs: Long,
+        ) {
+            val intent = Intent(ACTION_LIBRE_BLE_DATA).apply {
+                putExtra("com.eveningoutpost.dexdrip.Extras.DATA_BUFFER", frame46)
+                putExtra("com.eveningoutpost.dexdrip.Extras.TIMESTAMP", timestampMs)
+                putExtra("com.eveningoutpost.dexdrip.Extras.LIBRE_RAW_ID", Process.myPid())
                 addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
             }
             context.sendBroadcast(intent)

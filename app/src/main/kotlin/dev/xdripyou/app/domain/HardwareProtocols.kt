@@ -292,6 +292,64 @@ object LibreHardwareParser {
 
         fun buildRequestDataCommand(): ByteArray = byteArrayOf(0x00, 0x00, 0x05)
     }
+
+    /**
+     * Port of xDrip's `LibreBluetooth.java`: accumulates 46-byte Libre 2 direct BLE payloads
+     * arriving from Abbott `0000fde3` / `0000f002` notifications for OOP2 / external decoding.
+     */
+    class Libre2BleAssembler(
+        private val timeoutMs: Long = 3_000L,
+    ) {
+        private val buffer = ByteArray(46)
+        private var accumulated = 0
+        private var lastReceiveMs = 0L
+
+        fun onPacket(packet: ByteArray, nowMs: Long = System.currentTimeMillis()): ByteArray? {
+            if (packet.isEmpty()) return null
+            if (lastReceiveMs > 0L && nowMs - lastReceiveMs > timeoutMs) {
+                accumulated = 0
+            }
+            lastReceiveMs = nowMs
+            val copyLen = minOf(packet.size, buffer.size - accumulated)
+            if (copyLen > 0) {
+                System.arraycopy(packet, 0, buffer, accumulated, copyLen)
+                accumulated += copyLen
+            }
+            return if (accumulated >= 46) {
+                accumulated = 0
+                buffer.copyOf()
+            } else {
+                null
+            }
+        }
+    }
+
+    /**
+     * Parses external Libre OOP2 / OOPResultsContainer JSON broadcasts into glucose readings.
+     */
+    data class LibreOopReading(val timestampMs: Long, val mgdl: Double)
+
+    fun parseOopResultsJson(json: String, fallbackTimeMs: Long = System.currentTimeMillis()): List<LibreOopReading> {
+        val clean = json.trim()
+        if (clean.isEmpty()) return emptyList()
+        val bgRegex = Regex(""""currentBg"\s*:\s*(-?\d+(?:\.\d+)?)""")
+        val tsRegex = Regex(""""timestamp"\s*:\s*(\d{10,13})""")
+        val histRegex = Regex("""\{[^}]*"quality"\s*:\s*0[^}]*"bg"\s*:\s*(-?\d+(?:\.\d+)?)[^}]*\}""")
+        val out = mutableListOf<LibreOopReading>()
+        val ts = tsRegex.find(clean)?.groupValues?.getOrNull(1)?.toLongOrNull() ?: fallbackTimeMs
+        bgRegex.find(clean)?.groupValues?.getOrNull(1)?.toDoubleOrNull()
+            ?.takeIf { it in 20.0..600.0 }
+            ?.let { out += LibreOopReading(ts, it) }
+        for (m in histRegex.findAll(clean)) {
+            val hBg = m.groupValues[1].toDoubleOrNull()?.takeIf { it in 20.0..600.0 } ?: continue
+            val hTime = Regex(""""time"\s*:\s*(\d+)""").find(m.value)?.groupValues?.getOrNull(1)?.toLongOrNull()
+            if (hTime != null) {
+                // Keep relative spacing for historic points when present
+                out += LibreOopReading(ts - 60_000L, hBg)
+            }
+        }
+        return out
+    }
 }
 
 object DexcomBleParser {

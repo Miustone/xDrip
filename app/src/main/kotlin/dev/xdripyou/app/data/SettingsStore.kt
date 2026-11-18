@@ -199,6 +199,8 @@ class SettingsStore(context: Context) {
         bleDeviceName = this[Keys.BLE_DEVICE_NAME] ?: "",
         nfcLibreEnabled = this[Keys.NFC_LIBRE_ENABLED] ?: true,
         calibrationAlgorithm = this[Keys.CALIBRATION_ALGORITHM] ?: "xdrip_wls",
+        dexcomTransmitterId = this[Keys.DEXCOM_TRANSMITTER_ID] ?: "",
+        libreOopBridgeEnabled = this[Keys.LIBRE_OOP_BRIDGE] ?: false,
     )
 
     data class AlertCooldowns(
@@ -340,6 +342,8 @@ class SettingsStore(context: Context) {
         val BLE_DEVICE_NAME = stringPreferencesKey("ble_device_name")
         val NFC_LIBRE_ENABLED = booleanPreferencesKey("nfc_libre_enabled")
         val CALIBRATION_ALGORITHM = stringPreferencesKey("calibration_algorithm")
+        val DEXCOM_TRANSMITTER_ID = stringPreferencesKey("dexcom_transmitter_id")
+        val LIBRE_OOP_BRIDGE = booleanPreferencesKey("libre_oop_bridge")
 
         val LAST_COMPANION_VAL = longPreferencesKey("last_companion_val")
         val LAST_COMPANION_REPEAT = longPreferencesKey("last_companion_repeat")

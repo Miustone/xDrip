@@ -995,12 +995,18 @@ private fun SettingsSourcesPage(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text("Direkt-Hardware (BLE & NFC)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Direkt-Hardware (Dexcom G7/G6 BLE, Libre 2/3 & NFC)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     SwitchRow(
                         "Freestyle Libre NFC Scan aktiv",
                         "Liest Libre 1/2 FRAM direkt bei Sensor-NFC-Kontakt ein (ISO 15693)",
                         settings.nfcLibreEnabled,
                         viewModel::setNfcLibreEnabled,
+                    )
+                    SwitchRow(
+                        "Libre 2/OOP2 External Bridge aktiv",
+                        "Sendet 46B/344B Libre-Rohdaten an OOP2-Decoder & empfängt OOP2_DATA",
+                        settings.libreOopBridgeEnabled,
+                        viewModel::setLibreOopBridgeEnabled,
                     )
                     Text(
                         "Aktiver BLE-Typ: ${settings.bleDeviceType}" +
@@ -1014,12 +1020,22 @@ private fun SettingsSourcesPage(
                         style = MaterialTheme.typography.labelSmall,
                         color = scheme.onSurfaceVariant,
                     )
+                    if (bleStatus.lastCalibrationState.isNotBlank()) {
+                        Text(
+                            "Sensor-Status: ${bleStatus.lastCalibrationState}" +
+                                (bleStatus.lastPredictedMgdl?.let { " · Pred: $it mg/dL" } ?: ""),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = scheme.tertiary,
+                        )
+                    }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf(
                             "none" to "Aus",
-                            "meter" to "BT Messgerät (0x1808)",
+                            "dexcom_bluetails" to "Dexcom G7 (BlueTails)",
+                            "dexcom" to "Dexcom OB1 (G7/G6)",
+                            "libre2_ble" to "Libre 2 BLE",
                             "libre_bridge" to "Libre Bridge (Bubble/MM)",
-                            "dexcom" to "Dexcom G6/ONE",
+                            "meter" to "BT Messgerät (0x1808)",
                         ).forEach { (typeKey, label) ->
                             FilterChip(
                                 selected = settings.bleDeviceType == typeKey,
@@ -1030,6 +1046,19 @@ private fun SettingsSourcesPage(
                                 label = { Text(label) },
                             )
                         }
+                    }
+                    if (settings.bleDeviceType == "dexcom" || settings.bleDeviceType == "dexcom_bluetails") {
+                        var txIdText by remember(settings.dexcomTransmitterId) { mutableStateOf(settings.dexcomTransmitterId) }
+                        OutlinedTextField(
+                            value = txIdText,
+                            onValueChange = {
+                                txIdText = it.uppercase()
+                                viewModel.setDexcomTransmitterId(it)
+                            },
+                            label = { Text("Dexcom Transmitter-ID (6 Zeichen für G6/ONE, leer/kurz für G7)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(
@@ -1049,7 +1078,13 @@ private fun SettingsSourcesPage(
                             },
                             modifier = Modifier.weight(1f),
                         ) { Text(if (bleStatus.scanning) "Scan stoppen" else "BLE scannen") }
-                        if (settings.bleDeviceType != "none" && settings.bleDeviceAddress.isNotBlank()) {
+                        OutlinedButton(
+                            onClick = { BleCollectorManager.loadBondedDexcomDevices(context) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Gekoppeltes G7") }
+                    }
+                    if (settings.bleDeviceType != "none" && settings.bleDeviceAddress.isNotBlank()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(
                                 onClick = {
                                     if (bleStatus.connected) {
@@ -1060,8 +1095,19 @@ private fun SettingsSourcesPage(
                                 },
                                 modifier = Modifier.weight(1f),
                             ) { Text(if (bleStatus.connected) "Trennen" else "Verbinden") }
+                            if (bleStatus.connected && (settings.bleDeviceType == "dexcom" || settings.bleDeviceType == "dexcom_bluetails")) {
+                                OutlinedButton(
+                                    onClick = { BleCollectorManager.requestDexcomBackfill(3) },
+                                    modifier = Modifier.weight(1f),
+                                ) { Text("3h Backfill") }
+                            }
                         }
                     }
+                    Text(
+                        "Hinweis Libre 3/3+: Direkte ECDH-Verschlüsselung nicht offen; empfange Libre 3/3+ direkt über Companion-Benachrichtigungen (inkl. FreeStyle Libre 3 App), LibreLinkUp oder Juggluco-Broadcast.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = scheme.onSurfaceVariant,
+                    )
                     bleStatus.discoveredDevices.take(6).forEach { dev ->
                         Surface(
                             color = scheme.surfaceContainerHigh,

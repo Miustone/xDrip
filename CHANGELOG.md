@@ -6,6 +6,18 @@ Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 
 ---
 
+## [26.11.13] - 2026-11-18
+
+### Hinzugefügt & Portiert (Dexcom G7 / OB1 BLE-Kollektor & Libre 2/3 Bridge)
+- **Dexcom G7 / ONE+ & G6 BLE-Stack (`DexcomBleProtocol.kt`, `BleCollectorService.kt`):**
+  - **BlueTails G7-Listener (`dexcom_bluetails`):** Findet bereits gekoppelte `DXC…`/`Dex…` G7-Sensoren (Button *„Gekoppeltes G7“*), aktiviert `Control` (`F8083534-…`) & `Backfill` (`F8083536-…`) und dekodiert **G7 `EGlucoseRxMessage` (`0x4E`)** inkl. Alter, Sensor-Status, Vorhersagewert und 9-Byte-Backfill-Frames (`DexcomBackfillAssembler`).
+  - **Aktive OB1 BLE State-Machine (`dexcom`):** Portiert `AuthRequestTx`, **AES/ECB-Challenge-Hash** (`00<TxID>00<TxID>`), `BondRequestTx`, `FastCRC16`, `BackFillTx2` (`3h Backfill`-Button) und `CalibrateTx`.
+- **FreeStyle Libre 2 BLE & OOP2 / Libre 3 Bridge (`HardwareProtocols.kt`, `NfcLibreReader.kt`, `XdripBroadcastReceiver.kt`, `CamApsParser.kt`):**
+  - Portiert `LibreBluetooth` (`0000fde3`/`0000f002` 46-Byte Assembler), `LIBRE_DATA` / `LIBRE_BLE_DATA` Broadcasts und `OOP2_DATA` Empfänger sowie offizielle **FreeStyle Libre 3 / 3+ App**- und **Juggluco**-Companion-Paket-Erkennung.
+- **Versionsstand:** `versionName = "26.11.13"`, `versionCode = 261113`.
+
+---
+
 ## [26.11.12] - 2026-11-18
 
 ### Hinzugefügt & Portiert (Erweiterte xDrip-Statistik, Kalibrierungs-Plugins & Web-Service-Parität)

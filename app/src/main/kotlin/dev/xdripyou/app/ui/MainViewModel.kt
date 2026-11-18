@@ -1153,6 +1153,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setDexcomTransmitterId(txId: String) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.DEXCOM_TRANSMITTER_ID] = txId.trim().uppercase() }
+        }
+    }
+
+    fun setLibreOopBridgeEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.LIBRE_OOP_BRIDGE] = enabled }
+        }
+    }
+
     private data class SyncAndExtraBundle(
         val pumpStatus: ExternalPumpStatus?,
         val hcGranted: Boolean,

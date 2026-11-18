@@ -218,6 +218,8 @@ data class AppSettings(
     val bleDeviceName: String = "",
     val nfcLibreEnabled: Boolean = true,
     val calibrationAlgorithm: String = "xdrip_wls",
+    val dexcomTransmitterId: String = "",
+    val libreOopBridgeEnabled: Boolean = false,
 )
 
 data class ReminderItem(

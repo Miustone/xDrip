@@ -59,11 +59,20 @@ object NfcLibreReader {
                 }
 
                 val crcValid = LibreHardwareParser.verifyFram344(fram)
+                val now = System.currentTimeMillis()
+                if (settings.libreOopBridgeEnabled) {
+                    XdripBroadcastReceiver.sendLibreOopFrame(
+                        context = app,
+                        fram344 = fram,
+                        patchUid = uid,
+                        serial = serial,
+                        timestampMs = now,
+                    )
+                }
                 val si = app.repository.currentSlopeIntercept()
                 val parsed = LibreHardwareParser.parseFram344(fram, si)
                     ?: error("Ungültiger Libre FRAM Inhalt")
 
-                val now = System.currentTimeMillis()
                 val out = app.repository.insertReading(
                     mgdl = parsed.estimatedMgdl,
                     timestampMs = now,
