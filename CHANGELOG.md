@@ -6,6 +6,18 @@ Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 
 ---
 
+## [26.11.19] - 2026-11-18
+
+### Hinzugefügt & Behoben (Glooko-Port aus GlucoAhead + Wearable-Health-Connect-Origin)
+- **Glooko Cloud-Client komplett nach `GlucoAhead` portiert (`GlookoClient.kt`, `MiniJson.kt`):**
+  - **Web-First Authentifizierung** (`/users/sign_in?id=login_form&locale=en-GB`) mit automatischem EU-Cluster-Failover (`de-fr.my.glooko.com` ↔ `eu.my.glooko.com`), `window.patient`/`apiUrl`-Extraktion sowie JSON-API-Fallback (`/api/v3/users/sign_in` & `/api/v2/users/sign_in`).
+  - **`X-Requested-With: XMLHttpRequest` + Cursor-Pagination (`lastUpdatedAt`, `limit=500`, `lastGuid`)** über alle realen v2-Feeds (`/api/v2/cgm/egvs`, `normal_boluses`, `extended_boluses`, `injection_boluses`, `cgm/insulin_events`, `foods`, `cgm/carbs_events`, `readings`), `/api/v2/external/pumps/settings` (Basalprofil, DIA, IOB-Snapshot) und `/api/v3/graph/data` (inkl. CamAPS FX `deliveredBolus`, `gkCarb` & Fake-UTC-Korrektur).
+- **Health Connect Wearable-Origin (`HealthConnectSyncManager.kt`):**
+  - Bevorzugt analog zu `GlucoAhead` automatisch die primäre Watch/Fitness-Quelle (z. B. Mi Fitness `com.xiaomi.wearable`) in 30-Min.-Aggregationsbuckets.
+- **Versionsstand:** `versionName = "26.11.19-rc1"`, `versionCode = 261119`.
+
+---
+
 ## [26.11.18] - 2026-11-18
 
 ### Behoben (Glooko Cloud-Login & Dokumentation)

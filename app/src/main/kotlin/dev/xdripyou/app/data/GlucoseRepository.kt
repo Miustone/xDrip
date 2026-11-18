@@ -414,6 +414,20 @@ class GlucoseRepository(
             if (out is InsertOutcome.Inserted) insertedReadings++
         }
         val insertedTreatments = insertUniqueTreatments(payload.treatments)
+        if (payload.iobSnapshotUnits != null && payload.iobSnapshotTimestampMs != null) {
+            _externalPumpStatus.value = ExternalPumpStatus(
+                timestampMs = payload.iobSnapshotTimestampMs,
+                iobUnits = payload.iobSnapshotUnits,
+            )
+        }
+        val basalRates = payload.basalHourlyRates
+        if (basalRates != null && settingsStore.current().basalScheduleWire.isBlank()) {
+            settingsStore.update {
+                it[SettingsStore.Keys.BASAL_SCHEDULE_WIRE] =
+                    dev.xdripyou.app.domain.BasalSchedule(basalRates).encodeWire()
+                it[SettingsStore.Keys.SHOW_BASAL_RATE] = true
+            }
+        }
         return Result.success(
             "Glooko OK · ↓ $insertedReadings neue Werte (${payload.readings.size} gelesen), $insertedTreatments Insulin/KH-Einträge"
         )

@@ -12,6 +12,7 @@ import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.MealType
 import androidx.health.connect.client.records.NutritionRecord
 import androidx.health.connect.client.records.StepsRecord
+import androidx.health.connect.client.records.metadata.DataOrigin
 import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.AggregateGroupByDurationRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
@@ -261,26 +262,64 @@ object HealthConnectSyncManager {
             )
         }
 
+    private suspend fun resolvePreferredStepsOrigin(
+        client: HealthConnectClient,
+        start: Instant,
+        end: Instant,
+    ): DataOrigin? = runCatching {
+        val resp = client.readRecords(
+            ReadRecordsRequest(
+                recordType = StepsRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(start, end),
+            )
+        )
+        resp.records
+            .groupBy { it.metadata.dataOrigin }
+            .mapValues { (_, recs) -> recs.sumOf { it.count } }
+            .entries
+            .filter { (origin, total) -> total > 0 && !origin.packageName.startsWith("com.android.healthconnect.phone") }
+            .maxByOrNull { it.value }
+            ?.key
+    }.getOrNull()
+
     private suspend fun readHourlySteps(
         client: HealthConnectClient,
         start: Instant,
         end: Instant,
     ): List<Pair<Long, Int>> {
-        // Prefer Health Connect aggregation to automatically deduplicate multi-app step sources
+        val preferredOrigin = resolvePreferredStepsOrigin(client, start, end)
+        val originFilter = preferredOrigin?.let { setOf(it) } ?: emptySet()
+
+        // Prefer Health Connect aggregation using wearable origin (e.g. Mi Fitness) to match watch totals
         val aggregated = runCatching {
-            val alignedStartEpoch = (start.toEpochMilli() / 3_600_000L) * 3_600_000L
+            val alignedStartEpoch = (start.toEpochMilli() / 1_800_000L) * 1_800_000L
             val alignedStart = Instant.ofEpochMilli(alignedStartEpoch)
-            val buckets = client.aggregateGroupByDuration(
+            var buckets = client.aggregateGroupByDuration(
                 AggregateGroupByDurationRequest(
                     metrics = setOf(StepsRecord.COUNT_TOTAL),
                     timeRangeFilter = TimeRangeFilter.between(alignedStart, end),
-                    timeRangeSlicer = Duration.ofHours(1),
+                    timeRangeSlicer = Duration.ofMinutes(30),
+                    dataOriginFilter = originFilter,
                 )
             )
-            buckets.mapNotNull { b ->
-                val count = b.result[StepsRecord.COUNT_TOTAL]?.toInt() ?: 0
-                if (count > 0) b.startTime.toEpochMilli() to count else null
+            if (originFilter.isNotEmpty() && buckets.all { (it.result[StepsRecord.COUNT_TOTAL] ?: 0L) == 0L }) {
+                buckets = client.aggregateGroupByDuration(
+                    AggregateGroupByDurationRequest(
+                        metrics = setOf(StepsRecord.COUNT_TOTAL),
+                        timeRangeFilter = TimeRangeFilter.between(alignedStart, end),
+                        timeRangeSlicer = Duration.ofMinutes(30),
+                    )
+                )
             }
+            val byHour = linkedMapOf<Long, Long>()
+            for (b in buckets) {
+                val count = b.result[StepsRecord.COUNT_TOTAL] ?: 0L
+                if (count > 0L) {
+                    val hourTs = (b.startTime.toEpochMilli() / 3_600_000L) * 3_600_000L
+                    byHour[hourTs] = (byHour[hourTs] ?: 0L) + count
+                }
+            }
+            byHour.entries.sortedBy { it.key }.map { it.key to it.value.toInt() }
         }.getOrDefault(emptyList())
 
         if (aggregated.isNotEmpty()) return aggregated
@@ -293,8 +332,9 @@ object HealthConnectSyncManager {
                     timeRangeFilter = TimeRangeFilter.between(start, end),
                 )
             ).records
+            val filtered = if (preferredOrigin != null) raw.filter { it.metadata.dataOrigin == preferredOrigin }.ifEmpty { raw } else raw
             val byHour = linkedMapOf<Long, Long>()
-            for (r in raw) {
+            for (r in filtered) {
                 val hourTs = (r.startTime.toEpochMilli() / 3_600_000L) * 3_600_000L
                 byHour[hourTs] = (byHour[hourTs] ?: 0L) + r.count
             }

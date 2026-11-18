@@ -153,7 +153,39 @@ class GlookoTest {
         )
         val htmlMeta = """<html><head><meta name="csrf-token" content="meta-tok-123" /></head></html>"""
         assertEquals("meta-tok-123", GlookoClient.extractCsrfToken(htmlMeta))
+        val htmlRevMeta = """<html><head><meta content="rev-tok-999" name="csrf-token" /></head></html>"""
+        assertEquals("rev-tok-999", GlookoClient.extractCsrfToken(htmlRevMeta))
         val htmlForm = """<form><input type="hidden" name="authenticity_token" value="form-tok-456" /></form>"""
         assertEquals("form-tok-456", GlookoClient.extractCsrfToken(htmlForm))
+
+        val euClusters = GlookoClient.clusterCandidates(dev.xdripyou.app.data.GlookoRegion.EU_DE)
+        assertEquals(2, euClusters.size)
+        assertEquals("https://de-fr.my.glooko.com", euClusters[0].first)
+        assertEquals("https://eu.my.glooko.com", euClusters[1].first)
+    }
+
+    @Test
+    fun parseCamApsV3GraphAndScaledGlucose_extractsProperly() {
+        val v3Json = """
+            {
+              "series": {
+                "cgmNormal": [
+                  { "systemTime": "2026-11-18T11:00:00Z", "value": 12400 }
+                ],
+                "deliveredBolus": [
+                  { "systemTime": "2026-11-18T11:05:00Z", "insulinDelivered": 2.4, "carbsInput": 24, "bolusType": "Normal" }
+                ],
+                "gkCarb": [
+                  { "systemTime": "2026-11-18T11:15:00Z", "carbs": 15, "name": "Obst" }
+                ]
+              }
+            }
+        """.trimIndent()
+        val parsed = GlookoClient.parseGraphDataJson(v3Json)
+        assertEquals(1, parsed.readings.size)
+        assertEquals(124.0, parsed.readings[0].mgdl, 0.01)
+        assertEquals(2, parsed.treatments.size)
+        assertEquals(2.4, parsed.treatments.first { it.insulinUnits > 0.0 }.insulinUnits, 0.01)
+        assertEquals(15.0, parsed.treatments.first { it.note.contains("Obst") }.carbsGrams, 0.01)
     }
 }

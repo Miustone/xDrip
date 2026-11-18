@@ -2595,6 +2595,8 @@ private fun SettingsDiagnosticsPage(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
+                    Text("[26.11.19-rc1] · Glooko-Port aus GlucoAhead & Xiaomi/Watch Health Connect", fontWeight = FontWeight.Bold)
+                    Text("• Web-First Auth (de-fr ↔ eu), Cursor-Pagination über alle v2 Feeds (/egvs, boluses, foods) & CamAPS v3 Graph-Series\n• Health Connect bevorzugt automatisch Watch-/Mi-Fitness-Schritte in 30m-Buckets")
                     Text("[26.11.18-rc1] · Glooko Login Fix (/api/v2/users/sign_in + Web-Fallback)", fontWeight = FontWeight.Bold)
                     Text("• Behebt HTTP 404 beim Glooko Cloud-Login inkl. Web-CSRF-Fallback & korrigierter /foods-/insulins-Endpunkte\n• Aktualisierte CHANGELOG.md & README.md")
                     Text("[26.11.17-rc1] · Health Connect Aktivität & Glooko Sync/Import", fontWeight = FontWeight.Bold)
