@@ -2595,6 +2595,8 @@ private fun SettingsDiagnosticsPage(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
+                    Text("[26.11.18-rc1] · Glooko Login Fix (/api/v2/users/sign_in + Web-Fallback)", fontWeight = FontWeight.Bold)
+                    Text("• Behebt HTTP 404 beim Glooko Cloud-Login inkl. Web-CSRF-Fallback & korrigierter /foods-/insulins-Endpunkte\n• Aktualisierte CHANGELOG.md & README.md")
                     Text("[26.11.17-rc1] · Health Connect Aktivität & Glooko Sync/Import", fontWeight = FontWeight.Bold)
                     Text("• Voller Health Connect Sync in die Übersicht: Schritte, Herzfrequenz (Puls-Kurve), Trainings, Kohlenhydrate & CGM-Werte\n• Glooko Cloud-Follower (DE/FR, EU, US, CA, UK, AU) + direkter Glooko ZIP/CSV-Import für historische Werte, Insulin & Kohlenhydrate")
                     Text("[26.11.4] · Einrichtungs-Assistent & volle xDrip-Optionen", fontWeight = FontWeight.Bold)

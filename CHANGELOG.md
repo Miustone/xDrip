@@ -6,6 +6,32 @@ Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 
 ---
 
+## [26.11.18] - 2026-11-18
+
+### Behoben (Glooko Cloud-Login & Dokumentation)
+- **Glooko Cloud-Login (`GlookoClient.kt`):**
+  - Verwendet den verifizierten Login-Endpunkt `/api/v2/users/sign_in` (`userLogin`) statt `/api/v2/sessions` (HTTP 404 behoben) sowie automatischen **Web-Formular-Fallback** (`/users/sign_in` mit CSRF-Token-Extraktion und Regional-Redirect-Erkennung).
+  - Bereinigt Daten-Abfragen auf die existierenden Endpunkte (`/api/v3/session/users`, `/api/v3/graph/data`, `/api/v2/readings`, `/api/v2/pumps/normal_boluses`, `/api/v2/pumps/extended_boluses`, `/api/v2/foods`, `/api/v2/insulins`).
+- **Changelog & README:** Vollständige Nachträge für `26.11.17` und `26.11.18` im Repository ergänzt.
+- **Versionsstand:** `versionName = "26.11.18-rc1"`, `versionCode = 261118`.
+
+---
+
+## [26.11.17] - 2026-11-18
+
+### Hinzugefügt & Behoben (Health Connect Aktivität, Glooko & Sperrbildschirm-Fix)
+- **Volle Health Connect Übersicht (`HealthConnectSyncManager.kt`, `OverviewScreen.kt`, `GlucoseChart.kt`):**
+  - Liest jetzt neben Blutzucker (`BloodGlucoseRecord`) und Kohlenhydraten (`NutritionRecord`) auch deduplizierte Stunden-**Schritte (`StepsRecord`)**, **Herzfrequenz (`HeartRateRecord`)** und **Workouts (`ExerciseSessionRecord`)** und zeigt Schritte, `♥ bpm`, Puls-Kurve und `Sport`-Marker direkt auf Übersicht & Chart.
+  - Automatische Aktivierung & Sofort-Sync beim Erteilen von Health-Connect-Berechtigungen; einzelne fehlende Berechtigungen blockieren andere Datentypen nicht mehr.
+- **Glooko Integration (`GlookoClient.kt`, `GlookoExportImporter.kt`, `HistoryScreen.kt`):**
+  - Neuer Glooko Cloud-Follower (inkl. Hintergrund-Poll alle 15 Min. sowie manueller 48h-/30-Tage-Abruf für CGM, Insulin, KH & BZ) plus direkter **Glooko `.zip` / `.csv` Export-Importer** (`my.glooko.com`, Deutsch/Englisch inkl. Basalprofil-Import).
+  - Mehr-Tage-Verlauf (`7T / 14T / 30T / 90T`) im Tab **Verlauf** zeigt importierte historische Werte und Therapien vollständig an.
+- **Kein ungewolltes Öffnen vor dem Sperrbildschirm (`AndroidManifest.xml`, `AlertEngine.kt`):**
+  - Entfernt `android:showWhenLocked="true"` und `android:turnScreenOn="true"` von `MainActivity` sowie `setFullScreenIntent(...)` bei Alarm-Benachrichtigungen.
+- **Versionsstand:** `versionName = "26.11.17-rc1"`, `versionCode = 261117`.
+
+---
+
 ## [26.11.16] - 2026-11-18
 
 ### Behoben (Scroll-/Zoom-Glättung & Insulinkurve)

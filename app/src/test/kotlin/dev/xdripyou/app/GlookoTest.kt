@@ -144,4 +144,16 @@ class GlookoTest {
         assertEquals("abc123", GlookoClient.extractGlookoCode("""{"user":{"glookoCode":"abc123"}}"""))
         assertEquals("xyz789", GlookoClient.extractGlookoCode("""[{"glookoCode":"xyz789"}]"""))
     }
+
+    @Test
+    fun signInUrlAndCsrfExtraction_matchLiveGlookoEndpoints() {
+        assertEquals(
+            "https://de-fr.api.glooko.com/api/v2/users/sign_in",
+            GlookoClient.signInApiUrl(dev.xdripyou.app.data.GlookoRegion.EU_DE),
+        )
+        val htmlMeta = """<html><head><meta name="csrf-token" content="meta-tok-123" /></head></html>"""
+        assertEquals("meta-tok-123", GlookoClient.extractCsrfToken(htmlMeta))
+        val htmlForm = """<form><input type="hidden" name="authenticity_token" value="form-tok-456" /></form>"""
+        assertEquals("form-tok-456", GlookoClient.extractCsrfToken(htmlForm))
+    }
 }

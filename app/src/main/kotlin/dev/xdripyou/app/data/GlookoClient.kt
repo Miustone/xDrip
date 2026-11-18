@@ -8,6 +8,7 @@ import java.io.OutputStreamWriter
 import java.net.HttpCookie
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.OffsetDateTime
@@ -49,15 +50,25 @@ data class GlookoPayload(
 )
 
 /**
- * Glooko Cloud client supporting regional API clusters (`de-fr.api.glooko.com`, `eu.api.glooko.com`, `api.glooko.com`),
- * fetching CGM values, insulin boluses, carbohydrates, and meter BG checks.
- * Uses pure-Kotlin JSON scanning in parsers so JVM unit tests and Android runtime behave identically.
+ * Glooko Cloud client supporting regional clusters (`de-fr.api.glooko.com` / `de-fr.my.glooko.com`, `eu.*`, US, UK, CA, AU):
+ * 1) Authenticates via `/api/v2/users/sign_in` (`userLogin`), with automatic fallback to Rails web form `/users/sign_in` + CSRF token.
+ * 2) Pulls CGM values, insulin boluses, carbohydrates, and meter BG checks via `/api/v3/graph/data` & discrete `/api/v2/` endpoints.
+ * Pure-Kotlin JSON scanning is used in parsers so JVM unit tests and Android runtime behave identically.
  */
 object GlookoClient {
 
     private const val MGDL_PER_MMOL = 18.0182
     private val numberFieldRegex = Regex(""""([A-Za-z0-9_]+)"\s*:\s*(-?\d+(?:\.\d+)?)""")
     private val stringFieldRegex = Regex(""""([A-Za-z0-9_]+)"\s*:\s*"([^"]*)"""")
+
+    internal fun signInApiUrl(region: GlookoRegion): String = "https://${region.apiHost}/api/v2/users/sign_in"
+
+    internal fun extractCsrfToken(html: String): String? {
+        val metaRegex = Regex("""<meta[^>]*name=["']csrf-token["'][^>]*content=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+        metaRegex.find(html)?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() }?.let { return it }
+        val inputRegex = Regex("""name=["']authenticity_token["'][^>]*value=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+        return inputRegex.find(html)?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() }
+    }
 
     suspend fun fetchData(
         region: GlookoRegion,
@@ -70,50 +81,78 @@ object GlookoClient {
             require(user.isNotBlank() && password.isNotBlank()) { "Glooko E-Mail oder Passwort fehlt" }
 
             val cookieJar = mutableMapOf<String, String>()
+            var activeApiHost = region.apiHost
+            var activeWebHost = region.webHost
+            var csrfToken: String? = null
+            var authHeaderToken: String? = null
+            var apiLoginSucceeded = false
+            var webLoginSucceeded = false
 
-            val loginUrl = "https://${region.apiHost}/api/v2/sessions"
+            // Step 1A: Mobile/API JSON login on /api/v2/users/sign_in
             val escEmail = escapeJson(user)
             val escPass = escapeJson(password)
             val loginBody = """{"userLogin":{"email":"$escEmail","password":"$escPass"},"deviceInformation":{"applicationType":"logbook","os":"android","osVersion":"34","device":"Android","applicationVersion":"6.1.3"}}"""
-
-            val loginResp = executeHttp(
-                urlStr = loginUrl,
+            val apiResp = executeHttp(
+                urlStr = signInApiUrl(region),
                 method = "POST",
                 body = loginBody,
-                origin = "https://${region.webHost}",
+                contentType = "application/json",
+                origin = "https://$activeWebHost",
                 cookies = cookieJar,
                 bearerToken = null,
             )
 
-            if (loginResp.code == 401 || loginResp.code == 403) {
-                if (loginResp.body.contains("cloudflare", ignoreCase = true) ||
-                    loginResp.body.contains("captcha", ignoreCase = true)
-                ) {
-                    error("Glooko Cloud blockiert direkten Login (Captcha/Bot-Schutz). Nutze den Glooko ZIP/CSV-Import.")
+            if (apiResp.code in 200..299) {
+                apiLoginSucceeded = true
+                authHeaderToken = extractFieldString(apiResp.body, "token")
+                    ?: extractFieldString(apiResp.body, "session_token")
+                    ?: extractFieldString(apiResp.body, "jwt")
+            } else if (apiResp.code == 401) {
+                // Retry via web form before reporting 401 (some EU accounts only allow web session login)
+                val webLogin = performWebLogin(region.webHost, user, password, cookieJar)
+                if (webLogin.success) {
+                    webLoginSucceeded = true
+                    activeWebHost = webLogin.finalWebHost
+                    activeApiHost = webHostToApiHost(activeWebHost)
+                    csrfToken = webLogin.csrfToken
+                } else if (webLogin.blockedByCaptcha) {
+                    error("Glooko blockiert den Login (Captcha/Bot-Schutz). Nutze stattdessen den Glooko ZIP/CSV-Import.")
+                } else {
+                    error("Glooko Login fehlgeschlagen (HTTP 401). Zugangsdaten oder Server-Region (${region.labelDe}) prüfen.")
                 }
-                error("Glooko Login fehlgeschlagen (${loginResp.code}). Zugangsdaten oder Region prüfen.")
-            }
-            if (loginResp.code !in 200..299) {
-                error("Glooko Server HTTP ${loginResp.code} bei Login (Tipp: ggf. Region prüfen oder ZIP/CSV-Import nutzen).")
+            } else {
+                // Step 1B: Web form fallback on https://<webHost>/users/sign_in
+                val webLogin = performWebLogin(region.webHost, user, password, cookieJar)
+                if (webLogin.success) {
+                    webLoginSucceeded = true
+                    activeWebHost = webLogin.finalWebHost
+                    activeApiHost = webHostToApiHost(activeWebHost)
+                    csrfToken = webLogin.csrfToken
+                } else if (webLogin.blockedByCaptcha) {
+                    error("Glooko blockiert den Login (Captcha/Bot-Schutz). Nutze stattdessen den Glooko ZIP/CSV-Import.")
+                } else {
+                    error("Glooko Login fehlgeschlagen (API HTTP ${apiResp.code} / Web HTTP ${webLogin.httpCode}). Region prüfen oder ZIP/CSV-Import nutzen.")
+                }
             }
 
-            val authHeaderToken = extractFieldString(loginResp.body, "token")
-                ?: extractFieldString(loginResp.body, "session_token")
+            val baseHost = if (webLoginSucceeded && !apiLoginSucceeded) activeWebHost else activeApiHost
 
+            // Step 2: Fetch user context (glookoCode) without invalid v2 parameters
             var glookoCode: String? = null
-            val sessionUserResp = executeHttp(
-                urlStr = "https://${region.apiHost}/api/v3/session/users",
-                method = "GET",
-                body = null,
-                origin = "https://${region.webHost}",
+            val sessionUserResp = executeApiWithFallback(
+                primaryHost = baseHost,
+                fallbackHost = activeWebHost,
+                pathAndQuery = "/api/v3/session/users",
+                origin = "https://$activeWebHost",
                 cookies = cookieJar,
                 bearerToken = authHeaderToken,
+                csrfToken = csrfToken,
             )
             if (sessionUserResp.code in 200..299) {
                 glookoCode = extractGlookoCode(sessionUserResp.body)
             }
-            if (glookoCode == null) {
-                glookoCode = extractGlookoCode(loginResp.body)
+            if (glookoCode == null && apiLoginSucceeded) {
+                glookoCode = extractGlookoCode(apiResp.body)
             }
 
             val endMs = System.currentTimeMillis()
@@ -128,20 +167,22 @@ object GlookoClient {
             val allReadings = mutableListOf<GlookoReading>()
             val allTreatments = mutableListOf<TreatmentEntry>()
 
-            val graphUrl = buildString {
-                append("https://${region.apiHost}/api/v3/graph/data")
+            // Step 3: Query /api/v3/graph/data (unified CGM, BG, Bolus, Carbs)
+            val graphPath = buildString {
+                append("/api/v3/graph/data")
                 append("?startDate=$startIso&endDate=$endIso$patientParam")
                 append("&series[]=cgmHigh&series[]=cgmLow&series[]=cgmNormal")
                 append("&series[]=bgHigh&series[]=bgLow&series[]=bgNormal")
                 append("&series[]=bolus&series[]=carbs&series[]=manualInsulin")
             }
-            val graphResp = executeHttp(
-                urlStr = graphUrl,
-                method = "GET",
-                body = null,
-                origin = "https://${region.webHost}",
+            val graphResp = executeApiWithFallback(
+                primaryHost = baseHost,
+                fallbackHost = activeWebHost,
+                pathAndQuery = graphPath,
+                origin = "https://$activeWebHost",
                 cookies = cookieJar,
                 bearerToken = authHeaderToken,
+                csrfToken = csrfToken,
             )
             if (graphResp.code in 200..299) {
                 val parsedGraph = parseGraphDataJson(graphResp.body)
@@ -149,28 +190,28 @@ object GlookoClient {
                 allTreatments += parsedGraph.treatments
             }
 
+            // Step 4: Supplement via verified existing v2 endpoints
             val v2Endpoints = listOf(
-                "https://${region.apiHost}/api/v2/readings?startDate=$startIso&endDate=$endIso$patientParam" to "cgm",
-                "https://${region.apiHost}/api/v2/pumps/normal_boluses?startDate=$startIso&endDate=$endIso$patientParam" to "bolus",
-                "https://${region.apiHost}/api/v2/pumps/extended_boluses?startDate=$startIso&endDate=$endIso$patientParam" to "bolus",
-                "https://${region.apiHost}/api/v2/pumps/carbs?startDate=$startIso&endDate=$endIso$patientParam" to "carbs",
-                "https://${region.apiHost}/api/v2/food?startDate=$startIso&endDate=$endIso$patientParam" to "carbs",
-                "https://${region.apiHost}/api/v2/insulin?startDate=$startIso&endDate=$endIso$patientParam" to "bolus",
-                "https://${region.apiHost}/api/v2/readings/bg?startDate=$startIso&endDate=$endIso$patientParam" to "bg",
+                "/api/v2/readings?startDate=$startIso&endDate=$endIso$patientParam" to "cgm",
+                "/api/v2/pumps/normal_boluses?startDate=$startIso&endDate=$endIso$patientParam" to "bolus",
+                "/api/v2/pumps/extended_boluses?startDate=$startIso&endDate=$endIso$patientParam" to "bolus",
+                "/api/v2/foods?startDate=$startIso&endDate=$endIso$patientParam" to "carbs",
+                "/api/v2/insulins?startDate=$startIso&endDate=$endIso$patientParam" to "bolus",
             )
-            for ((url, kind) in v2Endpoints) {
-                val resp = executeHttp(
-                    urlStr = url,
-                    method = "GET",
-                    body = null,
-                    origin = "https://${region.webHost}",
+            for ((path, kind) in v2Endpoints) {
+                val resp = executeApiWithFallback(
+                    primaryHost = baseHost,
+                    fallbackHost = activeWebHost,
+                    pathAndQuery = path,
+                    origin = "https://$activeWebHost",
                     cookies = cookieJar,
                     bearerToken = authHeaderToken,
+                    csrfToken = csrfToken,
                 )
                 if (resp.code in 200..299) {
                     when (kind) {
                         "cgm" -> allReadings += parseV2ReadingsJson(resp.body)
-                        "bolus", "carbs", "bg" -> allTreatments += parseV2TreatmentsJson(resp.body, kind)
+                        "bolus", "carbs" -> allTreatments += parseV2TreatmentsJson(resp.body, kind)
                     }
                 }
             }
@@ -189,6 +230,101 @@ object GlookoClient {
                 glookoCode = glookoCode,
             )
         }
+    }
+
+    private data class WebLoginResult(
+        val success: Boolean,
+        val finalWebHost: String,
+        val csrfToken: String?,
+        val httpCode: Int,
+        val blockedByCaptcha: Boolean = false,
+    )
+
+    private fun performWebLogin(
+        initialWebHost: String,
+        email: String,
+        password: String,
+        cookies: MutableMap<String, String>,
+    ): WebLoginResult {
+        var currentWebHost = initialWebHost
+        val getPage = executeHttp(
+            urlStr = "https://$currentWebHost/users/sign_in",
+            method = "GET",
+            body = null,
+            contentType = null,
+            origin = "https://$currentWebHost",
+            cookies = cookies,
+            bearerToken = null,
+        )
+        getPage.finalHost?.takeIf { it.endsWith("glooko.com") }?.let { currentWebHost = it }
+        if (getPage.body.contains("captcha", ignoreCase = true) ||
+            getPage.body.contains("cf-turnstile", ignoreCase = true) ||
+            getPage.code == 403
+        ) {
+            return WebLoginResult(false, currentWebHost, null, getPage.code, blockedByCaptcha = true)
+        }
+        val authToken = extractCsrfToken(getPage.body) ?: return WebLoginResult(false, currentWebHost, null, getPage.code)
+        val enc = { s: String -> URLEncoder.encode(s, "UTF-8") }
+        val formBody = "utf8=%E2%9C%93&authenticity_token=${enc(authToken)}&user%5Bemail%5D=${enc(email)}&user%5Bpassword%5D=${enc(password)}&commit=Sign+In"
+
+        val postResp = executeHttp(
+            urlStr = "https://$currentWebHost/users/sign_in",
+            method = "POST",
+            body = formBody,
+            contentType = "application/x-www-form-urlencoded",
+            origin = "https://$currentWebHost",
+            cookies = cookies,
+            bearerToken = null,
+        )
+        postResp.finalHost?.takeIf { it.endsWith("glooko.com") }?.let { currentWebHost = it }
+        val blocked = postResp.code == 403 || postResp.body.contains("captcha", ignoreCase = true)
+        val stillOnSignIn = postResp.finalUrl?.contains("/users/sign_in") == true ||
+            postResp.body.contains("Invalid email or password", ignoreCase = true) ||
+            postResp.body.contains("Ungültige", ignoreCase = true)
+        val success = postResp.code in 200..299 && !stillOnSignIn && !blocked
+        val nextCsrf = extractCsrfToken(postResp.body) ?: authToken
+        return WebLoginResult(success, currentWebHost, nextCsrf, postResp.code, blocked)
+    }
+
+    private fun webHostToApiHost(webHost: String): String {
+        val clean = webHost.lowercase(Locale.ROOT)
+        return when {
+            clean == "my.glooko.com" -> "api.glooko.com"
+            clean.contains(".my.glooko.com") -> clean.replace(".my.glooko.com", ".api.glooko.com")
+            else -> clean
+        }
+    }
+
+    private fun executeApiWithFallback(
+        primaryHost: String,
+        fallbackHost: String,
+        pathAndQuery: String,
+        origin: String,
+        cookies: MutableMap<String, String>,
+        bearerToken: String?,
+        csrfToken: String?,
+    ): HttpResult {
+        val first = executeHttp(
+            urlStr = "https://$primaryHost$pathAndQuery",
+            method = "GET",
+            body = null,
+            contentType = null,
+            origin = origin,
+            cookies = cookies,
+            bearerToken = bearerToken,
+            csrfToken = csrfToken,
+        )
+        if (first.code in 200..299 || primaryHost == fallbackHost) return first
+        return executeHttp(
+            urlStr = "https://$fallbackHost$pathAndQuery",
+            method = "GET",
+            body = null,
+            contentType = null,
+            origin = origin,
+            cookies = cookies,
+            bearerToken = bearerToken,
+            csrfToken = csrfToken,
+        )
     }
 
     internal fun extractGlookoCode(jsonText: String): String? =
@@ -328,16 +464,6 @@ object GlookoClient {
                             eventType = "Meal Bolus",
                         )
                     }
-                }
-                "bg" -> {
-                    val raw = extractDouble(obj, "value", "bg", "glucoseValue") ?: continue
-                    val mgdl = normalizeBgValue(raw, obj, defaultMmol = false) ?: continue
-                    out += TreatmentEntry(
-                        timestampMs = ts,
-                        bloodGlucoseMgdl = mgdl,
-                        note = "Glooko BZ",
-                        eventType = "BG Check",
-                    )
                 }
             }
         }
@@ -507,51 +633,88 @@ object GlookoClient {
         return out
     }
 
-    private data class HttpResult(val code: Int, val body: String)
+    private data class HttpResult(
+        val code: Int,
+        val body: String,
+        val finalUrl: String? = null,
+        val finalHost: String? = null,
+    )
 
     private fun executeHttp(
         urlStr: String,
         method: String,
         body: String?,
+        contentType: String?,
         origin: String,
         cookies: MutableMap<String, String>,
         bearerToken: String?,
+        csrfToken: String? = null,
     ): HttpResult {
-        val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-            requestMethod = method
-            connectTimeout = 12_000
-            readTimeout = 15_000
-            instanceFollowRedirects = true
-            setRequestProperty("Accept", "application/json, text/plain, */*")
-            setRequestProperty("Origin", origin)
-            setRequestProperty("Referer", "$origin/")
-            setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0 Mobile Safari/537.36")
-            if (cookies.isNotEmpty()) {
-                setRequestProperty("Cookie", cookies.entries.joinToString("; ") { "${it.key}=${it.value}" })
-            }
-            if (!bearerToken.isNullOrBlank()) {
-                setRequestProperty("Authorization", "Bearer $bearerToken")
-            }
-            if (body != null) {
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json")
-            }
-        }
-        if (body != null) {
-            OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(body) }
-        }
-        val code = runCatching { conn.responseCode }.getOrDefault(-1)
-        val setCookies = conn.headerFields["Set-Cookie"] ?: conn.headerFields["set-cookie"] ?: emptyList()
-        for (header in setCookies) {
-            runCatching {
-                HttpCookie.parse(header).forEach { cookie ->
-                    if (cookie.value.isNotBlank()) cookies[cookie.name] = cookie.value
+        var currentUrl = urlStr
+        var currentMethod = method
+        var currentBody = body
+        var redirects = 0
+
+        while (true) {
+            val conn = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
+                requestMethod = currentMethod
+                connectTimeout = 12_000
+                readTimeout = 15_000
+                instanceFollowRedirects = false
+                val acceptHeader = if (contentType == "application/x-www-form-urlencoded" || currentMethod == "GET" && currentUrl.endsWith("/sign_in")) {
+                    "text/html,application/xhtml+xml,application/json,*/*"
+                } else {
+                    "application/json, text/plain, */*"
+                }
+                setRequestProperty("Accept", acceptHeader)
+                setRequestProperty("Origin", origin)
+                setRequestProperty("Referer", "$origin/")
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0 Mobile Safari/537.36")
+                if (cookies.isNotEmpty()) {
+                    setRequestProperty("Cookie", cookies.entries.joinToString("; ") { "${it.key}=${it.value}" })
+                }
+                if (!bearerToken.isNullOrBlank()) {
+                    setRequestProperty("Authorization", "Bearer $bearerToken")
+                }
+                if (!csrfToken.isNullOrBlank()) {
+                    setRequestProperty("X-CSRF-Token", csrfToken)
+                }
+                if (currentBody != null) {
+                    doOutput = true
+                    setRequestProperty("Content-Type", contentType ?: "application/json")
                 }
             }
+            if (currentBody != null) {
+                OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(currentBody) }
+            }
+            val code = runCatching { conn.responseCode }.getOrDefault(-1)
+            val setCookies = conn.headerFields["Set-Cookie"] ?: conn.headerFields["set-cookie"] ?: emptyList()
+            for (header in setCookies) {
+                runCatching {
+                    HttpCookie.parse(header).forEach { cookie ->
+                        if (cookie.value.isNotBlank()) cookies[cookie.name] = cookie.value
+                    }
+                }
+            }
+            if (code in listOf(301, 302, 303, 307, 308) && redirects < 5) {
+                val loc = conn.getHeaderField("Location")
+                conn.disconnect()
+                if (!loc.isNullOrBlank()) {
+                    currentUrl = URL(URL(currentUrl), loc).toString()
+                    if (code != 307 && code != 308) {
+                        currentMethod = "GET"
+                        currentBody = null
+                    }
+                    redirects++
+                    continue
+                }
+            }
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val text = runCatching { stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty() }.getOrDefault("")
+            val resolvedUrl = runCatching { conn.url?.toString() }.getOrNull() ?: currentUrl
+            val resolvedHost = runCatching { conn.url?.host }.getOrNull() ?: runCatching { URL(currentUrl).host }.getOrNull()
+            conn.disconnect()
+            return HttpResult(code, text, resolvedUrl, resolvedHost)
         }
-        val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-        val text = runCatching { stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty() }.getOrDefault("")
-        conn.disconnect()
-        return HttpResult(code, text)
     }
 }
