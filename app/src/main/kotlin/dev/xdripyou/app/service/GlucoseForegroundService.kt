@@ -88,6 +88,24 @@ class GlucoseForegroundService : Service() {
                             app.alertEngine.evaluateOnNewReading(afterLatest)
                         }
                     }
+                    if (settings.peerSyncEnabled && settings.peerSyncHost.isNotBlank()) {
+                        val beforeLatest = app.repository.getLatestReadings(1).firstOrNull()?.timestampMs ?: 0L
+                        app.repository.syncPeerMaster()
+                        val afterLatest = app.repository.getLatestReadings(1).firstOrNull()
+                        if (afterLatest != null && afterLatest.timestampMs > beforeLatest) {
+                            app.alertEngine.refreshOngoingNotification()
+                            app.alertEngine.evaluateOnNewReading(afterLatest)
+                        }
+                    }
+                    if (settings.healthConnectEnabled) {
+                        app.repository.syncHealthConnect(this@GlucoseForegroundService)
+                    }
+                    if (settings.influxEnabled && settings.influxUrl.isNotBlank() && settings.influxDatabase.isNotBlank()) {
+                        app.repository.syncInfluxDb()
+                    }
+                    if (settings.tidepoolEnabled && settings.tidepoolEmail.isNotBlank() && settings.tidepoolPassword.isNotBlank() && tickCount % 15 == 0) {
+                        app.repository.syncTidepool()
+                    }
                 }
                 if (tickCount % 60 == 0) {
                     app.repository.pruneExpiredReadings()

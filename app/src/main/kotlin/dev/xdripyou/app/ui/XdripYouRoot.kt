@@ -69,6 +69,7 @@ fun XdripYouRoot(
     onRequestBatteryExemption: () -> Unit,
     onOpenDndPolicy: () -> Unit,
     onOpenExactAlarms: () -> Unit,
+    onRequestHealthConnectPermissions: () -> Unit,
     onPickAlertRingtone: () -> Unit,
     onExportJson: () -> Unit,
     onImportJson: () -> Unit,
@@ -278,6 +279,35 @@ fun XdripYouRoot(
                     }
                 },
                 onSetLocalWebServiceConfig = viewModel::setLocalWebServiceConfig,
+                onRequestHealthConnectPermissions = onRequestHealthConnectPermissions,
+                onSetHealthConnectConfig = viewModel::setHealthConnectConfig,
+                onSyncHealthConnectNow = { cb ->
+                    viewModel.syncHealthConnectNow { msg ->
+                        cb(msg)
+                        scope.launch { snackbarHostState.showSnackbar(msg) }
+                    }
+                },
+                onSetInfluxConfig = viewModel::setInfluxConfig,
+                onSyncInfluxNow = { cb ->
+                    viewModel.syncInfluxNow { msg ->
+                        cb(msg)
+                        scope.launch { snackbarHostState.showSnackbar(msg) }
+                    }
+                },
+                onSetTidepoolConfig = viewModel::setTidepoolConfig,
+                onSyncTidepoolNow = { cb ->
+                    viewModel.syncTidepoolNow { msg ->
+                        cb(msg)
+                        scope.launch { snackbarHostState.showSnackbar(msg) }
+                    }
+                },
+                onSetPeerSyncConfig = viewModel::setPeerSyncConfig,
+                onSyncPeerMasterNow = { cb ->
+                    viewModel.syncPeerMasterNow { msg ->
+                        cb(msg)
+                        scope.launch { snackbarHostState.showSnackbar(msg) }
+                    }
+                },
                 onSetRetentionDays = viewModel::setRetentionDays,
                 onExportJson = onExportJson,
                 onImportJson = onImportJson,

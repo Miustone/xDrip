@@ -16,8 +16,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import dev.xdripyou.app.data.HealthConnectSyncManager
 import dev.xdripyou.app.service.GlucoseForegroundService
 import dev.xdripyou.app.service.SystemPermissionsHelper
 import dev.xdripyou.app.ui.MainViewModel
@@ -88,6 +90,11 @@ class MainActivity : ComponentActivity() {
             viewModel.setDefaultAlertSoundUri(uri?.toString() ?: "")
         }
 
+    private val healthConnectPermissionLauncher =
+        registerForActivityResult(PermissionController.createRequestPermissionResultContract()) {
+            viewModel.refreshPermissions()
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -127,6 +134,13 @@ class MainActivity : ComponentActivity() {
                     },
                     onOpenExactAlarms = {
                         SystemPermissionsHelper.openExactAlarmSettings(this)
+                    },
+                    onRequestHealthConnectPermissions = {
+                        if (HealthConnectSyncManager.isAvailable(this)) {
+                            healthConnectPermissionLauncher.launch(HealthConnectSyncManager.requiredPermissions)
+                        } else {
+                            HealthConnectSyncManager.openInstallOrSettings(this)
+                        }
                     },
                     onPickAlertRingtone = {
                         val existing = state.settings.defaultAlertSoundUri.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }

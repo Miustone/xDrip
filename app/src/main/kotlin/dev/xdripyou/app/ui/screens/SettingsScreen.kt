@@ -129,9 +129,9 @@ private val settingsCategories = listOf(
     ),
     SettingsCategoryMeta(
         section = SettingsSection.CLOUD,
-        title = "Cloud, Web-Service & Backup",
-        subtitle = "Nightscout, xDrip Web-Service (17580), AAPS-Broadcast, CSV & JSON",
-        keywords = "nightscout follower upload secret wifi wlan treatments aaps broadcast webservice server 17580 sgv pebble paket widget vorhaltung tage csv json export import backup",
+        title = "Cloud, Health Connect & Sync",
+        subtitle = "Nightscout, Health Connect, InfluxDB, Tidepool, Peer-Sync, Web-Service & Backup",
+        keywords = "nightscout follower upload secret wifi wlan treatments health connect influxdb tidepool peer sync desert master webservice server 17580 sgv pebble tasker broadcast paket widget vorhaltung tage csv json export import backup",
         icon = Icons.Rounded.CloudSync,
     ),
     SettingsCategoryMeta(
@@ -192,6 +192,15 @@ fun SettingsScreen(
     onSetLibreLinkConfig: (Boolean, String, String, String) -> Unit,
     onSyncLibreLinkNow: ((String) -> Unit) -> Unit,
     onSetLocalWebServiceConfig: (Boolean, Boolean, String) -> Unit,
+    onRequestHealthConnectPermissions: () -> Unit,
+    onSetHealthConnectConfig: (Boolean, Boolean, Boolean) -> Unit,
+    onSyncHealthConnectNow: ((String) -> Unit) -> Unit,
+    onSetInfluxConfig: (Boolean, String, String, String, String, String) -> Unit,
+    onSyncInfluxNow: ((String) -> Unit) -> Unit,
+    onSetTidepoolConfig: (Boolean, Boolean, String, String) -> Unit,
+    onSyncTidepoolNow: ((String) -> Unit) -> Unit,
+    onSetPeerSyncConfig: (Boolean, String, String) -> Unit,
+    onSyncPeerMasterNow: ((String) -> Unit) -> Unit,
     onSetRetentionDays: (Int) -> Unit,
     onExportJson: () -> Unit,
     onImportJson: () -> Unit,
@@ -284,6 +293,15 @@ fun SettingsScreen(
             onSetLocalBroadcastEnabled = onSetLocalBroadcastEnabled,
             onSetBroadcastTargetPackage = onSetBroadcastTargetPackage,
             onSetLocalWebServiceConfig = onSetLocalWebServiceConfig,
+            onRequestHealthConnectPermissions = onRequestHealthConnectPermissions,
+            onSetHealthConnectConfig = onSetHealthConnectConfig,
+            onSyncHealthConnectNow = onSyncHealthConnectNow,
+            onSetInfluxConfig = onSetInfluxConfig,
+            onSyncInfluxNow = onSyncInfluxNow,
+            onSetTidepoolConfig = onSetTidepoolConfig,
+            onSyncTidepoolNow = onSyncTidepoolNow,
+            onSetPeerSyncConfig = onSetPeerSyncConfig,
+            onSyncPeerMasterNow = onSyncPeerMasterNow,
             onSetRetentionDays = onSetRetentionDays,
             onExportJson = onExportJson,
             onImportJson = onImportJson,
@@ -1147,6 +1165,15 @@ private fun SettingsCloudPage(
     onSetLocalBroadcastEnabled: (Boolean) -> Unit,
     onSetBroadcastTargetPackage: (String) -> Unit,
     onSetLocalWebServiceConfig: (Boolean, Boolean, String) -> Unit,
+    onRequestHealthConnectPermissions: () -> Unit,
+    onSetHealthConnectConfig: (Boolean, Boolean, Boolean) -> Unit,
+    onSyncHealthConnectNow: ((String) -> Unit) -> Unit,
+    onSetInfluxConfig: (Boolean, String, String, String, String, String) -> Unit,
+    onSyncInfluxNow: ((String) -> Unit) -> Unit,
+    onSetTidepoolConfig: (Boolean, Boolean, String, String) -> Unit,
+    onSyncTidepoolNow: ((String) -> Unit) -> Unit,
+    onSetPeerSyncConfig: (Boolean, String, String) -> Unit,
+    onSyncPeerMasterNow: ((String) -> Unit) -> Unit,
     onSetRetentionDays: (Int) -> Unit,
     onExportJson: () -> Unit,
     onImportJson: () -> Unit,
@@ -1160,6 +1187,23 @@ private fun SettingsCloudPage(
     var targetPkgText by remember(settings.broadcastTargetPackage) { mutableStateOf(settings.broadcastTargetPackage) }
     var webSecretText by remember(settings.localWebServiceSecret) { mutableStateOf(settings.localWebServiceSecret) }
     var nsFeedback by remember { mutableStateOf<String?>(null) }
+
+    var hcFeedback by remember { mutableStateOf<String?>(null) }
+
+    var influxUrlText by remember(settings.influxUrl) { mutableStateOf(settings.influxUrl) }
+    var influxDbText by remember(settings.influxDatabase) { mutableStateOf(settings.influxDatabase) }
+    var influxOrgText by remember(settings.influxOrg) { mutableStateOf(settings.influxOrg) }
+    var influxUserText by remember(settings.influxUsername) { mutableStateOf(settings.influxUsername) }
+    var influxPassText by remember(settings.influxTokenOrPassword) { mutableStateOf(settings.influxTokenOrPassword) }
+    var influxFeedback by remember { mutableStateOf<String?>(null) }
+
+    var tideEmailText by remember(settings.tidepoolEmail) { mutableStateOf(settings.tidepoolEmail) }
+    var tidePassText by remember(settings.tidepoolPassword) { mutableStateOf(settings.tidepoolPassword) }
+    var tideFeedback by remember { mutableStateOf<String?>(null) }
+
+    var peerHostText by remember(settings.peerSyncHost) { mutableStateOf(settings.peerSyncHost) }
+    var peerSecretText by remember(settings.peerSyncSecret) { mutableStateOf(settings.peerSyncSecret) }
+    var peerFeedback by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -1302,6 +1346,222 @@ private fun SettingsCloudPage(
                             style = MaterialTheme.typography.labelSmall,
                             color = scheme.onSurfaceVariant,
                         )
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("Android Health Connect", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    StatusRow(
+                        if (state.healthConnectAvailable) "Health Connect Berechtigungen" else "Health Connect installieren / öffnen",
+                        state.healthConnectGranted,
+                        if (state.healthConnectAvailable) "Erlauben" else "Installieren",
+                        onRequestHealthConnectPermissions,
+                    )
+                    SwitchRow(
+                        "Health Connect Sync aktiv",
+                        "Bidirektionaler Glukose- & Kohlenhydrate-Abgleich",
+                        settings.healthConnectEnabled,
+                        { onSetHealthConnectConfig(it, settings.healthConnectSend, settings.healthConnectReceive) },
+                    )
+                    if (settings.healthConnectEnabled) {
+                        SwitchRow("Glukose & KH an Health Connect senden", null, settings.healthConnectSend) {
+                            onSetHealthConnectConfig(true, it, settings.healthConnectReceive)
+                        }
+                        SwitchRow("Glukose aus Health Connect empfangen", null, settings.healthConnectReceive) {
+                            onSetHealthConnectConfig(true, settings.healthConnectSend, it)
+                        }
+                        Button(
+                            onClick = { onSyncHealthConnectNow { hcFeedback = it } },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Health Connect jetzt syncen") }
+                        hcFeedback?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = scheme.primary) }
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("xDrip Peer-Sync (Master-Follower)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    SwitchRow(
+                        "Peer-Sync Follower aktiv",
+                        "Ruft Werte & Treatments direkt von einem anderen xDrip-Gerät (Port 17580) ab",
+                        settings.peerSyncEnabled,
+                        { onSetPeerSyncConfig(it, peerHostText, peerSecretText) },
+                    )
+                    OutlinedTextField(
+                        value = peerHostText,
+                        onValueChange = { peerHostText = it },
+                        label = { Text("Master-IP / Hostname (z. B. 192.168.1.42)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = peerSecretText,
+                        onValueChange = { peerSecretText = it },
+                        label = { Text("Optional: api-secret") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                onSetPeerSyncConfig(settings.peerSyncEnabled, peerHostText, peerSecretText)
+                                peerFeedback = "Gespeichert"
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Speichern") }
+                        Button(
+                            onClick = {
+                                onSetPeerSyncConfig(settings.peerSyncEnabled, peerHostText, peerSecretText)
+                                onSyncPeerMasterNow { peerFeedback = it }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Jetzt abrufen") }
+                    }
+                    peerFeedback?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = scheme.primary) }
+                }
+            }
+        }
+
+        item {
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("InfluxDB Uploader (v1 & v2)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    SwitchRow(
+                        "InfluxDB Upload aktiv",
+                        "Sendet Glukose & Treatments im Influx-Line-Protocol",
+                        settings.influxEnabled,
+                        { onSetInfluxConfig(it, influxUrlText, influxDbText, influxOrgText, influxUserText, influxPassText) },
+                    )
+                    if (settings.influxEnabled) {
+                        OutlinedTextField(
+                            value = influxUrlText,
+                            onValueChange = { influxUrlText = it },
+                            label = { Text("InfluxDB URL (z. B. https://influx.example.org:8086)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = influxDbText,
+                            onValueChange = { influxDbText = it },
+                            label = { Text("Datenbank (v1) oder Bucket (v2)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = influxOrgText,
+                            onValueChange = { influxOrgText = it },
+                            label = { Text("Organisation (nur InfluxDB v2, sonst leer)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = influxUserText,
+                                onValueChange = { influxUserText = it },
+                                label = { Text("Benutzer (v1)") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                            OutlinedTextField(
+                                value = influxPassText,
+                                onValueChange = { influxPassText = it },
+                                label = { Text("Passwort / Token") },
+                                visualTransformation = PasswordVisualTransformation(),
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = {
+                                    onSetInfluxConfig(true, influxUrlText, influxDbText, influxOrgText, influxUserText, influxPassText)
+                                    influxFeedback = "Gespeichert"
+                                },
+                                modifier = Modifier.weight(1f),
+                            ) { Text("Speichern") }
+                            Button(
+                                onClick = {
+                                    onSetInfluxConfig(true, influxUrlText, influxDbText, influxOrgText, influxUserText, influxPassText)
+                                    onSyncInfluxNow { influxFeedback = it }
+                                },
+                                modifier = Modifier.weight(1f),
+                            ) { Text("Jetzt senden") }
+                        }
+                        influxFeedback?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = scheme.primary) }
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("Tidepool Uploader", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    SwitchRow(
+                        "Tidepool Upload aktiv",
+                        "Lädt CGM-Werte, Bolus, KH & Fingerstich zu Tidepool hoch",
+                        settings.tidepoolEnabled,
+                        { onSetTidepoolConfig(it, settings.tidepoolDevServers, tideEmailText, tidePassText) },
+                    )
+                    if (settings.tidepoolEnabled) {
+                        SwitchRow(
+                            "Tidepool Dev-Server (int-api)",
+                            "Nur für Test-Accounts",
+                            settings.tidepoolDevServers,
+                            { onSetTidepoolConfig(true, it, tideEmailText, tidePassText) },
+                        )
+                        OutlinedTextField(
+                            value = tideEmailText,
+                            onValueChange = { tideEmailText = it },
+                            label = { Text("Tidepool E-Mail") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = tidePassText,
+                            onValueChange = { tidePassText = it },
+                            label = { Text("Passwort") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = {
+                                    onSetTidepoolConfig(true, settings.tidepoolDevServers, tideEmailText, tidePassText)
+                                    tideFeedback = "Gespeichert"
+                                },
+                                modifier = Modifier.weight(1f),
+                            ) { Text("Speichern") }
+                            Button(
+                                onClick = {
+                                    onSetTidepoolConfig(true, settings.tidepoolDevServers, tideEmailText, tidePassText)
+                                    onSyncTidepoolNow { tideFeedback = it }
+                                },
+                                modifier = Modifier.weight(1f),
+                            ) { Text("Jetzt hochladen") }
+                        }
+                        tideFeedback?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = scheme.primary) }
                     }
                 }
             }

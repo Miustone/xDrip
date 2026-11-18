@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.xdripyou.app.XdripYouApplication
+import dev.xdripyou.app.data.HealthConnectSyncManager
 import dev.xdripyou.app.data.InsertOutcome
 import dev.xdripyou.app.data.SettingsStore
 import dev.xdripyou.app.domain.ActiveAlertState
@@ -53,6 +54,8 @@ data class MainUiState(
     val statsPeriod: StatsPeriod = StatsPeriod.DAY_1,
     val extendedStats: ExtendedGlucoseStats = ExtendedGlucoseStats(),
     val externalPumpStatus: ExternalPumpStatus? = null,
+    val healthConnectAvailable: Boolean = false,
+    val healthConnectGranted: Boolean = false,
     val permissions: PermissionStatus = PermissionStatus(),
     val nowMs: Long = System.currentTimeMillis(),
 ) {
@@ -133,6 +136,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val statsPeriodFlow = MutableStateFlow(StatsPeriod.DAY_1)
     private val extendedStatsFlow = MutableStateFlow(ExtendedGlucoseStats())
     private val permissionsFlow = MutableStateFlow(SystemPermissionsHelper.getStatus(app))
+    private val healthConnectGrantedFlow = MutableStateFlow(false)
     private val nowMsFlow = MutableStateFlow(System.currentTimeMillis())
 
     private val since24h = System.currentTimeMillis() - 24 * 3_600_000L
@@ -161,8 +165,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         primaryDataFlow,
         metaFlow,
         repo.externalPumpStatusFlow,
+        healthConnectGrantedFlow,
         nowMsFlow,
-    ) { primary, meta, pumpStatus, nowMs ->
+    ) { primary, meta, pumpStatus, hcGranted, nowMs ->
         MainUiState(
             isLoaded = true,
             settings = primary.settings,
@@ -175,6 +180,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             statsPeriod = meta.statsPeriod,
             extendedStats = meta.extendedStats,
             externalPumpStatus = pumpStatus,
+            healthConnectAvailable = HealthConnectSyncManager.isAvailable(app),
+            healthConnectGranted = hcGranted,
             permissions = meta.perms,
             nowMs = nowMs,
         )
@@ -227,6 +234,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshPermissions() {
         permissionsFlow.value = SystemPermissionsHelper.getStatus(app)
         nowMsFlow.value = System.currentTimeMillis()
+        viewModelScope.launch {
+            healthConnectGrantedFlow.value = runCatching { HealthConnectSyncManager.hasAllPermissions(app) }.getOrDefault(false)
+        }
     }
 
     fun completeOnboarding(seedDemo: Boolean) {
@@ -380,6 +390,94 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun syncLibreLinkNow(onResult: (String) -> Unit) {
         viewModelScope.launch {
             val res = repo.syncLibreLinkUp()
+            nowMsFlow.value = System.currentTimeMillis()
+            alertEngine.refreshOngoingNotification()
+            onResult(res.getOrElse { "Fehler: ${it.message}" })
+        }
+    }
+
+    fun setHealthConnectConfig(enabled: Boolean, send: Boolean, receive: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.HC_ENABLED] = enabled
+                it[SettingsStore.Keys.HC_SEND] = send
+                it[SettingsStore.Keys.HC_RECEIVE] = receive
+            }
+        }
+    }
+
+    fun syncHealthConnectNow(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val res = repo.syncHealthConnect(app)
+            nowMsFlow.value = System.currentTimeMillis()
+            alertEngine.refreshOngoingNotification()
+            onResult(res.getOrElse { "Fehler: ${it.message}" })
+        }
+    }
+
+    fun setInfluxConfig(
+        enabled: Boolean,
+        url: String,
+        database: String,
+        org: String,
+        username: String,
+        tokenOrPass: String,
+    ) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.INFLUX_ENABLED] = enabled
+                it[SettingsStore.Keys.INFLUX_URL] = url.trim()
+                it[SettingsStore.Keys.INFLUX_DB] = database.trim()
+                it[SettingsStore.Keys.INFLUX_ORG] = org.trim()
+                it[SettingsStore.Keys.INFLUX_USER] = username.trim()
+                it[SettingsStore.Keys.INFLUX_PASS] = tokenOrPass
+            }
+        }
+    }
+
+    fun syncInfluxNow(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val res = repo.syncInfluxDb()
+            onResult(res.getOrElse { "Fehler: ${it.message}" })
+        }
+    }
+
+    fun setTidepoolConfig(
+        enabled: Boolean,
+        devServers: Boolean,
+        email: String,
+        password: String,
+    ) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.TIDEPOOL_ENABLED] = enabled
+                it[SettingsStore.Keys.TIDEPOOL_DEV] = devServers
+                it[SettingsStore.Keys.TIDEPOOL_EMAIL] = email.trim()
+                it[SettingsStore.Keys.TIDEPOOL_PASS] = password
+            }
+        }
+    }
+
+    fun syncTidepoolNow(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val res = repo.syncTidepool()
+            onResult(res.getOrElse { "Fehler: ${it.message}" })
+        }
+    }
+
+    fun setPeerSyncConfig(enabled: Boolean, host: String, secret: String) {
+        viewModelScope.launch {
+            settingsStore.update {
+                it[SettingsStore.Keys.PEER_SYNC_ENABLED] = enabled
+                it[SettingsStore.Keys.PEER_SYNC_HOST] = host.trim()
+                it[SettingsStore.Keys.PEER_SYNC_SECRET] = secret.trim()
+            }
+        }
+    }
+
+    fun syncPeerMasterNow(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val res = repo.syncPeerMaster()
             nowMsFlow.value = System.currentTimeMillis()
             alertEngine.refreshOngoingNotification()
             onResult(res.getOrElse { "Fehler: ${it.message}" })

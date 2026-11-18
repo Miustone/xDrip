@@ -311,6 +311,106 @@ class GlucoseRepository(
         return Result.success("LibreLinkUp OK (↓ $pulled neue Werte)")
     }
 
+    suspend fun syncHealthConnect(context: android.content.Context): Result<String> {
+        val settings = settingsStore.current()
+        if (!settings.healthConnectEnabled) return Result.success("Health Connect deaktiviert")
+        var sent = 0
+        var received = 0
+
+        if (settings.healthConnectSend) {
+            val recentReadings = getReadingsSince(System.currentTimeMillis() - 12 * 3_600_000L, 200)
+            val sendRes = HealthConnectSyncManager.writeReadings(context, recentReadings)
+            if (sendRes.isFailure) return Result.failure(sendRes.exceptionOrNull()!!)
+            sent = sendRes.getOrDefault(0)
+
+            val recentTreatments = getTreatmentsSince(System.currentTimeMillis() - 12 * 3_600_000L, 100)
+            HealthConnectSyncManager.writeCarbTreatments(context, recentTreatments)
+        }
+
+        if (settings.healthConnectReceive) {
+            val readRes = HealthConnectSyncManager.readRecentReadings(context, hoursBack = 12L)
+            if (readRes.isFailure) return Result.failure(readRes.exceptionOrNull()!!)
+            for ((ts, mgdl) in readRes.getOrThrow().sortedBy { it.first }) {
+                val out = insertReading(
+                    mgdl = mgdl,
+                    timestampMs = ts,
+                    source = "Health Connect",
+                    rawText = null,
+                    applyDeduplication = false,
+                )
+                if (out is InsertOutcome.Inserted) received++
+            }
+        }
+        return Result.success("Health Connect OK (↑ $sent, ↓ $received)")
+    }
+
+    suspend fun syncInfluxDb(): Result<String> {
+        val settings = settingsStore.current()
+        val recentReadings = getReadingsSince(System.currentTimeMillis() - 12 * 3_600_000L, 200)
+        val recentTreatments = getTreatmentsSince(System.currentTimeMillis() - 12 * 3_600_000L, 100)
+        val res = InfluxDbClient.upload(
+            baseUrl = settings.influxUrl,
+            databaseOrBucket = settings.influxDatabase,
+            org = settings.influxOrg,
+            username = settings.influxUsername,
+            tokenOrPassword = settings.influxTokenOrPassword,
+            readings = recentReadings,
+            treatments = recentTreatments,
+        )
+        return res.map { count -> "InfluxDB OK (↑ $count Werte)" }
+    }
+
+    suspend fun syncTidepool(): Result<String> {
+        val settings = settingsStore.current()
+        val recentReadings = getReadingsSince(System.currentTimeMillis() - 24 * 3_600_000L, 350)
+        val recentTreatments = getTreatmentsSince(System.currentTimeMillis() - 24 * 3_600_000L, 120)
+        val res = TidepoolClient.upload(
+            email = settings.tidepoolEmail,
+            password = settings.tidepoolPassword,
+            useDevServers = settings.tidepoolDevServers,
+            readings = recentReadings,
+            treatments = recentTreatments,
+        )
+        return res.map { count -> "Tidepool OK (↑ $count Datensätze)" }
+    }
+
+    suspend fun syncPeerMaster(): Result<String> {
+        val settings = settingsStore.current()
+        val res = XdripPeerSyncClient.fetchFromMaster(
+            masterHostOrUrl = settings.peerSyncHost,
+            apiSecret = settings.peerSyncSecret,
+            count = 48,
+        )
+        if (res.isFailure) return Result.failure(res.exceptionOrNull()!!)
+        val bundle = res.getOrThrow()
+        var pulled = 0
+        for (e in bundle.entries.sortedBy { it.timestampMs }) {
+            val out = insertReading(
+                mgdl = e.sgvMgdl,
+                timestampMs = e.timestampMs,
+                source = "xDrip Peer",
+                rawText = null,
+                applyDeduplication = false,
+                overrideTrend = NightscoutClient.directionToTrend(e.direction),
+            )
+            if (out is InsertOutcome.Inserted) pulled++
+        }
+        val existing = db.treatmentDao().getLatest(200).map { it.toDomain() }
+        var pulledTr = 0
+        for (remote in bundle.treatments) {
+            val duplicate = existing.any { local ->
+                kotlin.math.abs(local.timestampMs - remote.timestampMs) <= 60_000L &&
+                    kotlin.math.abs(local.insulinUnits - remote.insulinUnits) < 0.01 &&
+                    kotlin.math.abs(local.carbsGrams - remote.carbsGrams) < 0.1
+            }
+            if (!duplicate) {
+                db.treatmentDao().upsert(TreatmentEntity.fromDomain(remote.copy(syncedNightscout = false)))
+                pulledTr++
+            }
+        }
+        return Result.success("Peer-Sync OK (↓ $pulled Werte / $pulledTr Eintr.)")
+    }
+
     suspend fun exportBackupJson(): String {
         val readings = db.bgReadingDao().getLatest(2000).map { it.toDomain() }
         val treatments = db.treatmentDao().getLatest(500).map { it.toDomain() }

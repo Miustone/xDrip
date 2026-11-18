@@ -14,8 +14,8 @@ android {
         minSdk = 26
         targetSdk = 34
         // Versioning Scheme: YY.MM.AppVersion -> versionCode = YY * 10000 + MM * 100 + AppVersion
-        versionCode = 261108
-        versionName = "26.11.8"
+        versionCode = 261109
+        versionName = "26.11.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -70,6 +70,7 @@ dependencies {
     ksp(libs.androidx.room.compiler)
 
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.health.connect)
     implementation(libs.kotlinx.coroutines.android)
 
     testImplementation(libs.junit)

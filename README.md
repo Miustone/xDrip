@@ -2,7 +2,7 @@
 
 Modernisierte, aufgeräumte Neuimplementierung von xDrip in **100 % Kotlin + Jetpack Compose + Material 3 You**, aufbauend auf diesem Fork von `NightscoutFoundation/xDrip` (unveränderter Upstream-Stand liegt auf Branch `master`, aktive Entwicklung läuft auf `main` bzw. `kotlin-jetpack-you`).
 
-Aktuelle Version: **`26.11.8`** (`YY.MM.AppVersion`, Details in [CHANGELOG.md](CHANGELOG.md)).
+Aktuelle Version: **`26.11.9`** (`YY.MM.AppVersion`, Details in [CHANGELOG.md](CHANGELOG.md)).
 
 ## Enthaltene Features
 - **Ersteinrichtungs-Assistent (First-Run Setup Wizard)**:
@@ -24,7 +24,8 @@ Aktuelle Version: **`26.11.8`** (`YY.MM.AppVersion`, Details in [CHANGELOG.md](C
   - **Text-to-Speech (`SpeechHelper`)** für neue Blutzuckerwerte, Trends und Alarme inkl. anpassbarem Sprechtempo.
 - **Aufgeräumter Options-Hub, Ökosystem & Backup**:
   - Suchbarer **5-Kategorien-Options-Hub** (*Datenquellen & Sensor*, *Alarme & Klingeltöne*, *Anzeige & Material 3 You*, *Cloud, Broadcast & Export*, *Diagnose, Labor & Info*).
-  - **Nightscout, Dexcom Share & LibreLinkUp Follower**: Nightscout REST v1 (Messwerte, Treatments & DeviceStatus Upload/Pull), Dexcom Share Follower (US & EU) sowie direkter LibreLinkUp Follower (EU/DE/US/Global).
+  - **Nightscout, Dexcom Share, LibreLinkUp & Peer-Sync**: Nightscout REST v1 (Messwerte, Treatments & DeviceStatus Upload/Pull), Dexcom Share (US & EU), LibreLinkUp (EU/DE/US/Global) und direkter xDrip Peer-Sync (Port 17580).
+  - **Health Connect, InfluxDB & Tidepool**: Bidirektionaler Android Health Connect Sync (Blutzucker & KH), InfluxDB v1/v2 Line-Protocol-Uploader sowie Tidepool-Uploader.
   - **Lokaler xDrip-Broadcast, Broadcast-Snooze & Tasker-Bridge**: Sendet/empfängt `BgEstimate`, `Snooze` sowie Tasker-/Locale-Automationsbefehle.
   - **Lokaler xDrip Web-Service (Port 17580)**: Stellt `/sgv.json`, `/status.json`, `/treatments.json`, `/pebble` und `/tasker/<befehl>` lokal bereit.
   - **Material You Homescreen-Widget** (`xDrip 2 You · Blutzucker`), **JSON-Backup (Export/Import)**, **CSV-Export** und automatische Datenbereinigung nach Aufbewahrungsdauer.

@@ -118,6 +118,9 @@ class CamApsNotificationListenerService : NotificationListenerService() {
                 ) {
                     repo.syncNightscout(SystemPermissionsHelper.getBatteryPercent(this))
                 }
+                if (currentSettings.healthConnectEnabled && currentSettings.healthConnectSend) {
+                    dev.xdripyou.app.data.HealthConnectSyncManager.writeReadings(this, listOf(outcome.reading))
+                }
             }
             is InsertOutcome.Deduplicated -> {
                 repo.recordCollectorEvent(

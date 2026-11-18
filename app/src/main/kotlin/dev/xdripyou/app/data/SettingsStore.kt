@@ -162,6 +162,22 @@ class SettingsStore(context: Context) {
         showBasalRate = this[Keys.SHOW_BASAL_RATE] ?: false,
         basalScheduleWire = this[Keys.BASAL_SCHEDULE_WIRE] ?: "",
         nightscoutDeviceStatusEnabled = this[Keys.NS_DEVICE_STATUS] ?: true,
+        healthConnectEnabled = this[Keys.HC_ENABLED] ?: false,
+        healthConnectSend = this[Keys.HC_SEND] ?: true,
+        healthConnectReceive = this[Keys.HC_RECEIVE] ?: false,
+        influxEnabled = this[Keys.INFLUX_ENABLED] ?: false,
+        influxUrl = this[Keys.INFLUX_URL] ?: "",
+        influxDatabase = this[Keys.INFLUX_DB] ?: "",
+        influxOrg = this[Keys.INFLUX_ORG] ?: "",
+        influxUsername = this[Keys.INFLUX_USER] ?: "",
+        influxTokenOrPassword = this[Keys.INFLUX_PASS] ?: "",
+        tidepoolEnabled = this[Keys.TIDEPOOL_ENABLED] ?: false,
+        tidepoolDevServers = this[Keys.TIDEPOOL_DEV] ?: false,
+        tidepoolEmail = this[Keys.TIDEPOOL_EMAIL] ?: "",
+        tidepoolPassword = this[Keys.TIDEPOOL_PASS] ?: "",
+        peerSyncEnabled = this[Keys.PEER_SYNC_ENABLED] ?: false,
+        peerSyncHost = this[Keys.PEER_SYNC_HOST] ?: "",
+        peerSyncSecret = this[Keys.PEER_SYNC_SECRET] ?: "",
         dynamicColorEnabled = this[Keys.DYNAMIC_COLOR] ?: true,
         themeMode = ThemeModeOption.fromWire(this[Keys.THEME_MODE]),
     )
@@ -268,6 +284,22 @@ class SettingsStore(context: Context) {
         val SHOW_BASAL_RATE = booleanPreferencesKey("show_basal_rate")
         val BASAL_SCHEDULE_WIRE = stringPreferencesKey("basal_schedule_wire")
         val NS_DEVICE_STATUS = booleanPreferencesKey("ns_device_status")
+        val HC_ENABLED = booleanPreferencesKey("hc_enabled")
+        val HC_SEND = booleanPreferencesKey("hc_send")
+        val HC_RECEIVE = booleanPreferencesKey("hc_receive")
+        val INFLUX_ENABLED = booleanPreferencesKey("influx_enabled")
+        val INFLUX_URL = stringPreferencesKey("influx_url")
+        val INFLUX_DB = stringPreferencesKey("influx_db")
+        val INFLUX_ORG = stringPreferencesKey("influx_org")
+        val INFLUX_USER = stringPreferencesKey("influx_user")
+        val INFLUX_PASS = stringPreferencesKey("influx_pass")
+        val TIDEPOOL_ENABLED = booleanPreferencesKey("tidepool_enabled")
+        val TIDEPOOL_DEV = booleanPreferencesKey("tidepool_dev")
+        val TIDEPOOL_EMAIL = stringPreferencesKey("tidepool_email")
+        val TIDEPOOL_PASS = stringPreferencesKey("tidepool_pass")
+        val PEER_SYNC_ENABLED = booleanPreferencesKey("peer_sync_enabled")
+        val PEER_SYNC_HOST = stringPreferencesKey("peer_sync_host")
+        val PEER_SYNC_SECRET = stringPreferencesKey("peer_sync_secret")
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val THEME_MODE = stringPreferencesKey("theme_mode")
 

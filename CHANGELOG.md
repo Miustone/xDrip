@@ -6,6 +6,21 @@ Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 
 ---
 
+## [26.11.9] - 2026-11-18
+
+### Hinzugefügt & Portiert (Sync-Ökosystem komplettiert)
+- **Android Health Connect (`HealthConnectSyncManager.kt`, `MainActivity.kt`, `AndroidManifest.xml`):**
+  - Vollständige bidirektionale Integration über `androidx.health.connect:connect-client`: schreibt Blutzucker (`BloodGlucoseRecord`) und Kohlenhydrate (`NutritionRecord`), liest externe Glukosewerte und bindet Android-14+-Berechtigungen direkt ein.
+- **InfluxDB Uploader v1 & v2 (`InfluxDbClient.kt`):**
+  - Portierung von xDrips `InfluxDBUploader` (Line Protocol für `glucose` & `treatment`, unterstützt InfluxDB v1 `/write?db=` sowie v2 `/api/v2/write?org=&bucket=` mit Token).
+- **Tidepool Uploader (`TidepoolClient.kt`):**
+  - Portierung von xDrips `TidepoolUploader` (Login, Dataset-Session und Upload von `cbg`, `bolus`, `food` und `smbg` zu `api.tidepool.org` bzw. `int-api.tidepool.org`).
+- **xDrip Peer-Sync / Master-Follower (`XdripPeerSyncClient.kt`):**
+  - Direkter Geräte-zu-Geräte-Abruf (`/sgv.json` + `/treatments.json` auf Port `17580` inkl. optionalem `api-secret`) ohne Cloud-Server.
+- **Versionsstand:** `versionName = "26.11.9"`, `versionCode = 261109`.
+
+---
+
 ## [26.11.8] - 2026-11-18
 
 ### Hinzugefügt & Portiert
