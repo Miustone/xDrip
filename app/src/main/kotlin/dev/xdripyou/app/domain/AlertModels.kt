@@ -217,6 +217,7 @@ data class AppSettings(
     val bleDeviceAddress: String = "",
     val bleDeviceName: String = "",
     val nfcLibreEnabled: Boolean = true,
+    val calibrationAlgorithm: String = "xdrip_wls",
 )
 
 data class ReminderItem(

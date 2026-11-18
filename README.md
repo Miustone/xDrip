@@ -2,7 +2,7 @@
 
 Modernisierte, aufgeräumte Neuimplementierung von xDrip in **100 % Kotlin + Jetpack Compose + Material 3 You**, aufbauend auf diesem Fork von `NightscoutFoundation/xDrip` (unveränderter Upstream-Stand liegt auf Branch `master`, aktive Entwicklung läuft auf `main` bzw. `kotlin-jetpack-you`).
 
-Aktuelle Version: **`26.11.11`** (`YY.MM.AppVersion`, Details in [CHANGELOG.md](CHANGELOG.md)).
+Aktuelle Version: **`26.11.12`** (`YY.MM.AppVersion`, Details in [CHANGELOG.md](CHANGELOG.md)).
 
 ## Enthaltene Features
 - **Ersteinrichtungs-Assistent (First-Run Setup Wizard)**:

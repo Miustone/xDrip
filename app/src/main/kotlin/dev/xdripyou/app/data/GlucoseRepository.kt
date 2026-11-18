@@ -546,7 +546,8 @@ class GlucoseRepository(
 
     suspend fun currentSlopeIntercept(): SlopeIntercept {
         val cals = getRecentCalibrations(20)
-        return CalibrationEngine.calculateWls(cals)
+        val algo = dev.xdripyou.app.domain.CalibrationAlgorithm.fromWire(settingsStore.current().calibrationAlgorithm)
+        return CalibrationEngine.calculateByAlgorithm(cals, algo)
     }
 
     suspend fun addCalibration(

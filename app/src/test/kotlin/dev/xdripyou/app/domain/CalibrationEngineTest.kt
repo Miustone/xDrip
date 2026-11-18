@@ -64,4 +64,20 @@ class CalibrationEngineTest {
         assertTrue(smoothed[2].mgdl < 165.0)
         assertTrue(CalibrationEngine.estimateNoiseLevel(readings.reversed()) > 0.5)
     }
+
+    @Test
+    fun supportsUnweightedLast7AndFixedSlopePlugins() {
+        val cals = listOf(
+            CalibrationRecord(timestampMs = 1_000_000L, bgMgdl = 110.0, rawValue = 100.0, slope = 1.0, intercept = 0.0),
+            CalibrationRecord(timestampMs = 2_000_000L, bgMgdl = 160.0, rawValue = 150.0, slope = 1.0, intercept = 0.0),
+            CalibrationRecord(timestampMs = 3_000_000L, bgMgdl = 210.0, rawValue = 200.0, slope = 1.0, intercept = 0.0),
+        )
+        val ols = CalibrationEngine.calculateByAlgorithm(cals, CalibrationAlgorithm.LAST_7_UNWEIGHTED)
+        assertEquals(1.0, ols.slope, 1e-3)
+        assertEquals(10.0, ols.intercept, 1e-2)
+
+        val fixed = CalibrationEngine.calculateByAlgorithm(cals, CalibrationAlgorithm.FIXED_SLOPE)
+        assertEquals(1.0, fixed.slope, 1e-4)
+        assertEquals(10.0, fixed.intercept, 1e-4)
+    }
 }

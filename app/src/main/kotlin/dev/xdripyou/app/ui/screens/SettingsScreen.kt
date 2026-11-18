@@ -888,7 +888,16 @@ private fun SettingsSourcesPage(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text("Sensor-Kalibrierung (WLS Linear)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Sensor-Kalibrierung (WLS / Plugins)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        dev.xdripyou.app.domain.CalibrationAlgorithm.entries.forEach { algo ->
+                            FilterChip(
+                                selected = settings.calibrationAlgorithm == algo.wireValue,
+                                onClick = { viewModel.setCalibrationAlgorithm(algo.wireValue) },
+                                label = { Text(algo.labelDe) },
+                            )
+                        }
+                    }
                     Text(
                         "Aktuell (${si.calibrationCount} Punkte): Slope ${String.format(Locale.US, "%.3f", si.slope)} · Intercept ${String.format(Locale.US, "%.1f", si.intercept)}" +
                             (si.mardPercent?.let { " · MARD ${String.format(Locale.US, "%.1f%%", it)}" } ?: ""),

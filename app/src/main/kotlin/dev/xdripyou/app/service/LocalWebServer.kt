@@ -280,6 +280,18 @@ class LocalWebServer(
                         LocalWebPayloads.buildPebbleJson(readings, settings, iobCob)
                     }
                 }
+                "/sync" -> {
+                    runBlocking {
+                        repository.syncNightscout()
+                    }
+                    JSONObject().apply { put("status", "synced") }.toString()
+                }
+                "/heart", "/steps" -> {
+                    JSONObject().apply {
+                        put("status", "ok")
+                        put("timestamp", System.currentTimeMillis())
+                    }.toString()
+                }
                 else -> {
                     if (path.startsWith("/tasker/")) {
                         val cmd = java.net.URLDecoder.decode(rawTarget.substringBefore('?').substring(8), "UTF-8")

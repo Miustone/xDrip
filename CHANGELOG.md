@@ -6,6 +6,19 @@ Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 
 ---
 
+## [26.11.12] - 2026-11-18
+
+### Hinzugefügt & Portiert (Erweiterte xDrip-Statistik, Kalibrierungs-Plugins & Web-Service-Parität)
+- **GVI, PGS & Geschätzter HbA1c (`AgpStats.kt`, `HistoryScreen.kt`):**
+  - Portierung von xDrips **Glycemic Variability Index (GVI)**, **Patient Glycemic Status (PGS)** sowie **HbA1c (DCCT % & IFCC mmol/mol)** exakt nach `StatsResult.java`.
+- **Kalibrierungs-Plugins (`CalibrationEngine.kt`, `SettingsScreen.kt`):**
+  - Auswahl zwischen **xDrip WLS (Gewichtet)**, **Letzte 7 (OLS / `LastSevenUnweighted`)** und **Feste Steigung (1.0)** direkt unter *Optionen → Datenquellen & Sensor*.
+- **Lokale Web-Service Endpunkte (`LocalWebServer.kt`):**
+  - Ergänzt `/sync`, `/heart` und `/steps` für kompatible lokale Companion-Anfragen auf Port `17580`.
+- **Versionsstand:** `versionName = "26.11.12"`, `versionCode = 261112`.
+
+---
+
 ## [26.11.11] - 2026-11-18
 
 ### Hinzugefügt & Portiert (Direkt-Hardware, Overlay & Protokolle)

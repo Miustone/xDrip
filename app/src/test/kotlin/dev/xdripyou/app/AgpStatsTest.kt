@@ -60,5 +60,9 @@ class AgpStatsTest {
         assertEquals(75.0, ext.stats.inRangePercent, 0.1)
         assertEquals(100.0 / 7.0, ext.dataCapturePercent, 0.1)
         assertEquals(48, ext.agpBuckets.size)
+        assertTrue(ext.a1cDcctPercent in 5.5..7.5)
+        assertTrue(ext.a1cIfccMmolMol in 35..60)
+        assertTrue(ext.gvi >= 1.0)
+        assertTrue(ext.pgs > 0.0)
     }
 }

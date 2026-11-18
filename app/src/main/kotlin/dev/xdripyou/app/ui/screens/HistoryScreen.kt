@@ -204,8 +204,13 @@ fun HistoryScreen(
                             ) {
                                 StatPill("Ø ${GlucoseUnit.formatValue(stats.meanMgdl, settings.useMgdl)}")
                                 StatPill("GMI ${String.format(Locale.US, "%.1f%%", stats.gmiPercent)}")
+                                StatPill("A1c ${String.format(Locale.US, "%.1f%%", extStats.a1cDcctPercent)} (${extStats.a1cIfccMmolMol})")
                                 StatPill("SD ${GlucoseUnit.formatSpread(stats.sdMgdl, settings.useMgdl)}")
                                 StatPill("CV ${stats.cvPercent.toInt()}%")
+                                if (extStats.gvi > 0.0) {
+                                    StatPill("GVI ${String.format(Locale.US, "%.2f", extStats.gvi)}")
+                                    StatPill("PGS ${String.format(Locale.US, "%.1f", extStats.pgs)}")
+                                }
                                 StatPill("Abdeckung ${extStats.dataCapturePercent.toInt()}%")
                             }
                             Text(

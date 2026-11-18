@@ -4,6 +4,17 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.pow
 
+enum class CalibrationAlgorithm(val wireValue: String, val labelDe: String) {
+    XDRIP_WLS("xdrip_wls", "xDrip WLS (Gewichtet)"),
+    LAST_7_UNWEIGHTED("last7_unweighted", "Letzte 7 (OLS)"),
+    FIXED_SLOPE("fixed_slope", "Feste Steigung (1.0)");
+
+    companion object {
+        fun fromWire(value: String?): CalibrationAlgorithm =
+            entries.firstOrNull { it.wireValue == value } ?: XDRIP_WLS
+    }
+}
+
 data class CalibrationRecord(
     val id: Long = 0L,
     val timestampMs: Long,
@@ -57,6 +68,52 @@ object CalibrationEngine {
             timePercentage = (4.0 * timePercentage * timePercentage * timePercentage) / 2.0
         }
         return (timePercentage + 0.1).coerceIn(0.1, 2.0)
+    }
+
+    fun calculateByAlgorithm(
+        calibrations: List<CalibrationRecord>,
+        algorithm: CalibrationAlgorithm = CalibrationAlgorithm.XDRIP_WLS,
+    ): SlopeIntercept = when (algorithm) {
+        CalibrationAlgorithm.XDRIP_WLS -> calculateWls(calibrations)
+        CalibrationAlgorithm.LAST_7_UNWEIGHTED -> calculateUnweightedLastN(calibrations, n = 7)
+        CalibrationAlgorithm.FIXED_SLOPE -> calculateFixedSlope(calibrations)
+    }
+
+    /**
+     * Port of xDrip's `LastSevenUnweightedA`: ordinary least-squares over the latest [n] valid points.
+     */
+    fun calculateUnweightedLastN(calibrations: List<CalibrationRecord>, n: Int = 7): SlopeIntercept {
+        val valid = calibrations.filter { it.bgMgdl in 20.0..600.0 && it.rawValue > 0.0 }
+            .sortedByDescending { it.timestampMs }
+            .take(n)
+            .sortedBy { it.timestampMs }
+        if (valid.size < 2) return calculateWls(valid)
+        val meanX = valid.map { it.rawValue }.average()
+        val meanY = valid.map { it.bgMgdl }.average()
+        var sXX = 0.0
+        var sXY = 0.0
+        for (c in valid) {
+            val dx = c.rawValue - meanX
+            sXX += dx * dx
+            sXY += dx * (c.bgMgdl - meanY)
+        }
+        val slope = if (abs(sXX) > 1e-6) (sXY / sXX).coerceIn(MIN_SLOPE, MAX_SLOPE) else 1.0
+        val intercept = meanY - slope * meanX
+        val mard = valid.map { c -> abs(slope * c.rawValue + intercept - c.bgMgdl) / max(c.bgMgdl, 1.0) * 100.0 }.average()
+        return SlopeIntercept(slope = slope, intercept = intercept, calibrationCount = valid.size, mardPercent = mard, isSinglePoint = false)
+    }
+
+    fun calculateFixedSlope(calibrations: List<CalibrationRecord>): SlopeIntercept {
+        val valid = calibrations.filter { it.bgMgdl in 20.0..600.0 && it.rawValue > 0.0 }
+            .sortedByDescending { it.timestampMs }
+        val latest = valid.firstOrNull() ?: return SlopeIntercept(slope = 1.0, intercept = 0.0, calibrationCount = 0)
+        return SlopeIntercept(
+            slope = 1.0,
+            intercept = latest.bgMgdl - latest.rawValue,
+            calibrationCount = valid.size,
+            mardPercent = 0.0,
+            isSinglePoint = true,
+        )
     }
 
     /**

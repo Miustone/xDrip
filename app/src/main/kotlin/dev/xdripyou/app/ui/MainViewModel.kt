@@ -69,7 +69,10 @@ data class MainUiState(
     val latestReading: GlucoseReading? get() = readings24h.firstOrNull()
 
     val slopeIntercept: SlopeIntercept
-        get() = CalibrationEngine.calculateWls(calibrations)
+        get() = CalibrationEngine.calculateByAlgorithm(
+            calibrations,
+            dev.xdripyou.app.domain.CalibrationAlgorithm.fromWire(settings.calibrationAlgorithm),
+        )
 
     val noiseIndex: Double
         get() = CalibrationEngine.estimateNoiseLevel(readings24h)
@@ -1141,6 +1144,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setNfcLibreEnabled(enabled: Boolean) {
         viewModelScope.launch {
             settingsStore.update { it[SettingsStore.Keys.NFC_LIBRE_ENABLED] = enabled }
+        }
+    }
+
+    fun setCalibrationAlgorithm(wireValue: String) {
+        viewModelScope.launch {
+            settingsStore.update { it[SettingsStore.Keys.CALIBRATION_ALGORITHM] = wireValue }
         }
     }
 
